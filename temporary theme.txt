@@ -1,0 +1,5960 @@
+// C:\xampp\htdocs\GDAPPC\frontend\src\student\screens\ProfileScreen.js
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  ScrollView,
+  ActivityIndicator,
+  TouchableOpacity,
+  Alert
+} from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import api from '../services/api';
+import HamburgerHeader from '../components/HamburgerHeader';
+
+export default function ProfileScreen({ navigation }) {
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchUserProfile();
+  }, []);
+
+  const fetchUserProfile = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const userID = await AsyncStorage.getItem('userID');
+      
+      if (!token || !userID) {
+        throw new Error('User not authenticated');
+      }
+
+      // Since we don't have a dedicated profile endpoint, we'll use the data from login
+      // You might need to create a backend endpoint for fetching user profile
+      const userInfo = {
+        id: userID,
+        email: await AsyncStorage.getItem('userEmail'),
+        full_name: await AsyncStorage.getItem('userName'),
+        department: await AsyncStorage.getItem('userDepartment'),
+        current_gd_level: await AsyncStorage.getItem('userLevel'),
+        photo_url: await AsyncStorage.getItem('userPhoto')
+      };
+
+      setUserData(userInfo);
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      Alert.alert('Error', 'Failed to load profile data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getLevelBadge = (level) => {
+    const badges = {
+      1: { color: '#4CAF50', label: 'Beginner' },
+      2: { color: '#2196F3', label: 'Intermediate' },
+      3: { color: '#FF9800', label: 'Advanced' },
+      4: { color: '#9C27B0', label: 'Expert' },
+      5: { color: '#F44336', label: 'Master' }
+    };
+    return badges[level] || { color: '#667eea', label: `Level ${level}` };
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color="#4F46E5" />
+            <Text style={styles.loadingTitle}>Loading Profile</Text>
+            <Text style={styles.loadingSubtitle}>Please wait while we fetch your data...</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  const badge = getLevelBadge(userData?.current_gd_level);
+
+  return (
+    <View style={styles.container}>
+      <HamburgerHeader />
+      
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.contentContainer}>
+          {/* Profile Header */}
+          <View style={styles.profileHeader}>
+            <View style={styles.avatarContainer}>
+              {userData?.photo_url ? (
+                <Image
+                  source={{ uri: userData.photo_url }}
+                  style={styles.avatar}
+                />
+              ) : (
+                <LinearGradient
+                  colors={['#4F46E5', '#7C3AED']}
+                  style={styles.avatarPlaceholder}
+                >
+                  <Icon name="person" size={40} color="#fff" />
+                </LinearGradient>
+              )}
+            </View>
+            
+            <Text style={styles.userName}>{userData?.full_name || 'Student'}</Text>
+            
+            <View style={styles.levelBadge}>
+              <LinearGradient
+                colors={[badge.color, badge.color + 'DD']}
+                style={styles.badgeGradient}
+              >
+                <Text style={styles.badgeText}>{badge.label}</Text>
+                <Text style={styles.levelText}>Level {userData?.current_gd_level}</Text>
+              </LinearGradient>
+            </View>
+          </View>
+
+          {/* Profile Details */}
+          <View style={styles.detailsContainer}>
+            <View style={styles.detailsCard}>
+              <Text style={styles.sectionTitle}>Personal Information</Text>
+              
+              <View style={styles.detailItem}>
+                <View style={styles.detailIcon}>
+                  <Icon name="email" size={20} color="#4F46E5" />
+                </View>
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailLabel}>Email</Text>
+                  <Text style={styles.detailValue}>{userData?.email || 'N/A'}</Text>
+                </View>
+              </View>
+
+              <View style={styles.detailItem}>
+                <View style={styles.detailIcon}>
+                  <Icon name="school" size={20} color="#4F46E5" />
+                </View>
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailLabel}>Department</Text>
+                  <Text style={styles.detailValue}>{userData?.department || 'N/A'}</Text>
+                </View>
+              </View>
+
+              <View style={styles.detailItem}>
+                <View style={styles.detailIcon}>
+                  <Icon name="badge" size={20} color="#4F46E5" />
+                </View>
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailLabel}>Student ID</Text>
+                  <Text style={styles.detailValue}>{userData?.id || 'N/A'}</Text>
+                </View>
+              </View>
+
+              <View style={styles.detailItem}>
+                <View style={styles.detailIcon}>
+                  <Icon name="star" size={20} color="#4F46E5" />
+                </View>
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailLabel}>GD Level</Text>
+                  <Text style={styles.detailValue}>
+                    Level {userData?.current_gd_level} - {badge.label}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Stats Section */}
+          <View style={styles.statsContainer}>
+            <View style={styles.statsCard}>
+              <Text style={styles.sectionTitle}>Session Statistics</Text>
+              
+              <View style={styles.statsGrid}>
+                <View style={styles.statItem}>
+                  <View style={styles.statIconContainer}>
+                    <Icon name="group" size={24} color="#4CAF50" />
+                  </View>
+                  <Text style={styles.statNumber}>0</Text>
+                  <Text style={styles.statLabel}>Sessions</Text>
+                </View>
+
+                <View style={styles.statItem}>
+                  <View style={styles.statIconContainer}>
+                    <Icon name="trending-up" size={24} color="#2196F3" />
+                  </View>
+                  <Text style={styles.statNumber}>0</Text>
+                  <Text style={styles.statLabel}>Progress</Text>
+                </View>
+
+                <View style={styles.statItem}>
+                  <View style={styles.statIconContainer}>
+                    <Icon name="emoji-events" size={24} color="#FF9800" />
+                  </View>
+                  <Text style={styles.statNumber}>0</Text>
+                  <Text style={styles.statLabel}>Achievements</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#030508ff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  loadingCard: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 20,
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  loadingTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    marginTop: 20,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  loadingSubtitle: {
+    fontSize: 16,
+    color: '#94A3B8',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    padding: 20,
+    paddingTop: 80,
+  },
+  contentContainer: {
+    flex: 1,
+  },
+  profileHeader: {
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  avatarContainer: {
+    marginBottom: 16,
+  },
+  avatar: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 4,
+    borderColor: '#334155',
+  },
+  avatarPlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 4,
+    borderColor: '#334155',
+  },
+  userName: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#F8FAFC',
+    textAlign: 'center',
+    marginBottom: 16,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  levelBadge: {
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  badgeGradient: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  levelText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  detailsContainer: {
+    marginBottom: 24,
+  },
+  detailsCard: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  detailIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(79, 70, 229, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  detailContent: {
+    flex: 1,
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginBottom: 2,
+    fontWeight: '500',
+  },
+  detailValue: {
+    fontSize: 16,
+    color: '#F8FAFC',
+    fontWeight: '600',
+  },
+  statsContainer: {
+    marginBottom: 24,
+  },
+  statsCard: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  statNumber: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+});
+
+/// feedback
+
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity,ScrollView,Button, ActivityIndicator, Alert } from 'react-native';
+import { Rating } from 'react-native-ratings';
+import api from '../services/api';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import LinearGradient from 'react-native-linear-gradient';
+
+export default function FeedbackScreen({ route, navigation }) {
+    const { sessionId } = route.params;
+    const [rating, setRating] = useState(0);
+    const [comments, setComments] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [existingFeedback, setExistingFeedback] = useState(null);
+    const [checkingFeedback, setCheckingFeedback] = useState(true);
+const [feedback, setFeedback] = useState('');
+  const [submitting, setSubmitting] = useState(false)
+    useEffect(() => {
+        const checkFeedback = async () => {
+            try {
+                const response = await api.student.getFeedback(sessionId);
+                // Check if response has data (not empty object)
+                if (response.data && Object.keys(response.data).length > 0) {
+                    setExistingFeedback(response.data);
+                    setRating(response.data.rating || 3);
+                    setComments(response.data.comments || '');
+                }
+            } catch (error) {
+                console.log('Error checking feedback:', error);
+            } finally {
+                setCheckingFeedback(false);
+            }
+        };
+        checkFeedback();
+    }, [sessionId]);
+
+const handleSubmit = async () => {
+    if (rating < 1 || rating > 5) {
+        Alert.alert('Invalid Rating', 'Please provide a rating between 1 and 5');
+        return;
+    }
+
+    setSubmitting(true);
+    try {
+        // Make sure we're sending the data in the correct format
+        console.log('Submitting feedback:', {
+            session_id: sessionId,
+            rating: rating,
+            comments: comments
+        });
+        
+        await api.student.submitFeedback(sessionId, rating, comments);
+        Alert.alert('Success', 'Thank you for your feedback!');
+        navigation.goBack();
+    } catch (error) {
+        console.error('Feedback submission error details:', error.response?.data || error.message);
+        Alert.alert('Error', 'Failed to submit feedback. Please try again.');
+    } finally {
+        setSubmitting(false);
+    }
+};
+
+    if (checkingFeedback) {
+        return (
+            <View style={styles.container}>
+                <View style={styles.loadingContainer}>
+                    <View style={styles.loadingCard}>
+                        <ActivityIndicator size="large" color="#4F46E5" />
+                        <Text style={styles.loadingTitle}>Loading Feedback</Text>
+                        <Text style={styles.loadingSubtitle}>Please wait while we set up your feedback form...</Text>
+                    </View>
+                </View>
+            </View>
+        );
+    }
+
+ const renderStars = () => {
+    return (
+      <View style={styles.starsContainer}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <TouchableOpacity
+            key={star}
+            onPress={() => setRating(star)}
+            style={styles.starButton}
+            activeOpacity={0.7}
+          >
+            <LinearGradient
+              colors={star <= rating ? ['#FFD700', '#FFA000'] : ['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']}
+              style={styles.starGradient}
+            >
+              <Icon
+                name={star <= rating ? 'star' : 'star-border'}
+                size={32}
+                color={star <= rating ? '#fff' : '#94A3B8'}
+              />
+            </LinearGradient>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+
+    return (
+    <View style={styles.container}>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header Section */}
+        <View style={styles.header}>
+          <Text style={styles.title}>Session Feedback</Text>
+          <Text style={styles.subtitle}>Help us improve your experience</Text>
+        </View>
+
+        {/* Rating Section */}
+        <View style={styles.ratingCard}>
+            <View style={styles.ratingHeader}>
+              <View style={styles.ratingIconContainer}>
+                <Icon name="grade" size={24} color="#4F46E5" />
+              </View>
+              <Text style={styles.ratingLabel}>Rate Your Experience</Text>
+            </View>
+            <Text style={styles.ratingSubtext}>
+              How would you rate this discussion session?
+            </Text>
+            {renderStars()}
+            {rating > 0 && (
+              <Text style={styles.ratingText}>
+                {rating === 1 ? 'Poor' : 
+                 rating === 2 ? 'Fair' : 
+                 rating === 3 ? 'Good' : 
+                 rating === 4 ? 'Very Good' : 'Excellent'}
+              </Text>
+            )}
+        </View>
+
+        {/* Feedback Section */}
+        <View style={styles.feedbackCard}>
+    <View style={styles.feedbackHeader}>
+      <View style={styles.feedbackIconContainer}>
+        <Icon name="edit" size={24} color="#4F46E5" />
+      </View>
+      <Text style={styles.feedbackLabel}>Your Feedback</Text>
+    </View>
+    <Text style={styles.feedbackSubtext}>
+      Share your thoughts about the session
+    </Text>
+    
+    <View style={styles.inputContainer}>
+        <TextInput
+          style={styles.textInput}
+          placeholder="Tell us about your experience..."
+          placeholderTextColor="#64748B"
+          value={comments}
+          onChangeText={setComments}
+          multiline
+          numberOfLines={6}
+          textAlignVertical="top"
+        />
+    </View>
+    
+    <View style={styles.characterCount}>
+      <Text style={styles.characterCountText}>
+        {comments.length}/500 characters
+      </Text>
+    </View>
+</View>
+
+      {/* Submit Button */}
+<View style={styles.bottomContainer}>
+  <TouchableOpacity 
+    style={[styles.submitButton, (submitting || !comments.trim() || rating === 0) && styles.submitButtonDisabled]}
+    onPress={handleSubmit}
+    disabled={submitting || !comments.trim() || rating === 0}
+    activeOpacity={0.8}
+  >
+    <LinearGradient
+      colors={
+        submitting || !comments.trim() || rating === 0
+          ? ['#6B7280', '#4B5563'] 
+          : ['#10B981', '#059669']
+      }
+      start={{x: 0, y: 0}}
+      end={{x: 1, y: 1}}
+      style={styles.submitButtonGradient}
+    >
+      <View style={styles.submitButtonContent}>
+        {submitting ? (
+          <>
+            <ActivityIndicator size="small" color="#fff" />
+            <Text style={styles.submitButtonText}>Submitting...</Text>
+          </>
+        ) : (
+          <>
+            <Icon name="send" size={24} color="#fff" />
+            <Text style={styles.submitButtonText}>Submit Feedback</Text>
+          </>
+        )}
+      </View>
+    </LinearGradient>
+  </TouchableOpacity>
+  
+  <Text style={styles.submitHint}>
+    {submitting 
+      ? 'Please wait while we save your feedback...' 
+      : (!comments.trim() || rating === 0)
+        ? 'Please provide rating and feedback to submit'
+        : 'Your feedback helps us improve the experience'
+    }
+  </Text>
+</View>
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#030508ff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  loadingCard: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 20,
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  loadingTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    marginTop: 20,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  loadingSubtitle: {
+    fontSize: 16,
+    color: '#94A3B8',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: 20,
+    paddingTop: 25,
+    paddingBottom: 40,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#F8FAFC',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#94A3B8',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  ratingCard: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  ratingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  ratingIconContainer: {
+    marginRight: 12,
+  },
+  ratingLabel: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#F8FAFC',
+  },
+  ratingSubtext: {
+    fontSize: 14,
+    color: '#94A3B8',
+    marginBottom: 24,
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  starButton: {
+    marginHorizontal: 4,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  starGradient: {
+    padding: 8,
+  },
+  ratingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFD700',
+    textAlign: 'center',
+  },
+  feedbackCard: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  feedbackHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  feedbackIconContainer: {
+    marginRight: 12,
+  },
+  feedbackLabel: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#F8FAFC',
+  },
+  feedbackSubtext: {
+    fontSize: 14,
+    color: '#94A3B8',
+    marginBottom: 20,
+  },
+  inputContainer: {
+    backgroundColor: '#334155',
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#475569',
+  },
+  textInput: {
+    fontSize: 16,
+    color: '#F8FAFC',
+    minHeight: 120,
+    textAlignVertical: 'top',
+    padding: 16,
+  },
+  characterCount: {
+    alignItems: 'flex-end',
+  },
+  characterCountText: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  bottomContainer: {
+    alignItems: 'center',
+  },
+  submitButton: {
+    width: '100%',
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  submitButtonDisabled: {
+    opacity: 0.7,
+  },
+  submitButtonGradient: {
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+  },
+  submitButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  submitHint: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    paddingHorizontal: 20,
+  },
+});
+
+
+
+
+
+/// ///
+
+
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, BackHandler } from 'react-native';
+import api from '../services/api';
+import auth from '../services/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Timer from '../components/Timer';
+import { globalStyles, colors, layout } from '../assets/globalStyles';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import HamburgerHeader from '../components/HamburgerHeader';
+import LinearGradient from 'react-native-linear-gradient';
+
+export default function GdSessionScreen({ navigation, route }) {
+  const { sessionId } = route.params || {};
+  const [session, setSession] = useState(null);
+  const [phase, setPhase] = useState('prep');
+  const [timerActive, setTimerActive] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [timeRemaining, setTimeRemaining] = useState(0);
+  const [topic, setTopic] = useState("");
+
+  useEffect(() => {
+    const syncPhaseWithServer = async () => {
+      try {
+        const response = await api.student.getSessionPhase(sessionId);
+        if (response.data.phase !== phase) {
+          setPhase(response.data.phase);
+          const remainingSeconds = Math.max(0, 
+            (new Date(response.data.end_time) - new Date()) / 1000
+          );
+          setTimeRemaining(remainingSeconds);
+        }
+      } catch (error) {
+        console.log("Using local phase state as fallback");
+      }
+    };
+    
+    syncPhaseWithServer();
+  }, [sessionId]);
+
+  // Load session state from storage on mount
+  useEffect(() => {
+    const loadSessionState = async () => {
+      try {
+        const savedState = await AsyncStorage.getItem(`session_${sessionId}`);
+        if (savedState) {
+          const { phase: savedPhase, timeRemaining: savedTime } = JSON.parse(savedState);
+          setPhase(savedPhase);
+          setTimeRemaining(savedTime);
+        }
+      } catch (error) {
+        console.log('Error loading session state:', error);
+      }
+    };
+
+    if (sessionId) {
+      loadSessionState();
+    }
+  }, [sessionId]);
+
+  // Save session state to storage whenever it changes
+  useEffect(() => {
+    const saveSessionState = async () => {
+      try {
+        await AsyncStorage.setItem(`session_${sessionId}`, JSON.stringify({
+          phase,
+          timeRemaining
+        }));
+      } catch (error) {
+        console.log('Error saving session state:', error);
+      }
+    };
+
+    if (sessionId) {
+      saveSessionState();
+    }
+  }, [phase, timeRemaining, sessionId]);
+
+  // Handle back button press
+  useEffect(() => {
+    const backAction = () => {
+      Alert.alert(
+        "Session in Progress",
+        "Are you sure you want to leave? The timer will continue running.",
+        [
+          {
+            text: "Cancel",
+            onPress: () => null,
+            style: "cancel"
+          },
+          { 
+            text: "Leave", 
+            onPress: () => navigation.goBack() 
+          }
+        ]
+      );
+      return true;
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [navigation]);
+
+  // Fetch session details and topic
+  useEffect(() => {
+    if (!sessionId) {
+      setLoading(false);
+      return;
+    }
+
+    const fetchSessionAndTopic = async () => {
+      try {
+        const authData = await auth.getAuthData();
+        
+        if (!authData?.token) {
+          throw new Error('Authentication required');
+        }
+
+        // Fetch session details
+        const response = await api.student.getSession(sessionId);
+        
+        if (response.data?.error) {
+          throw new Error(response.data.error);
+        }
+
+        if (!response.data || !response.data.id) {
+          throw new Error('Invalid session data received');
+        }
+
+        const sessionData = response.data;
+        setSession(sessionData);
+
+        // Fetch topic for the session's level - FIXED THIS PART
+        try {
+          const topicResponse = await api.student.getTopicForLevel(sessionData.level);
+          
+          // Check if the response structure is correct
+          if (topicResponse.data && topicResponse.data.topic_text) {
+            setTopic(topicResponse.data.topic_text);
+          } else if (topicResponse.data && typeof topicResponse.data === 'string') {
+            // Handle case where the response might be just the topic text
+            setTopic(topicResponse.data);
+          } else {
+            // Use default topic if none found
+            setTopic("Discuss the impact of technology on modern education");
+          }
+        } catch (topicError) {
+          console.log('Failed to fetch session topic:', topicError);
+          setTopic("Discuss the impact of technology on modern education");
+        }
+
+      } catch (error) {
+        console.error('Failed to load session:', error);
+        let errorMessage = error.message;
+        
+        if (error.response) {
+          if (error.response.status === 404) {
+            errorMessage = 'Session not found';
+          } else if (error.response.status === 403) {
+            errorMessage = 'Not authorized to view this session';
+          } else if (error.response.status === 500) {
+            errorMessage = 'Server error - please try again later';
+          }
+        }
+        
+        Alert.alert(
+          'Session Error',
+          errorMessage,
+          [{ 
+            text: 'OK', 
+            onPress: () => navigation.goBack()
+          }]
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSessionAndTopic();
+  }, [sessionId, navigation]);
+
+  const handlePhaseComplete = () => {
+    if (phase === 'prep') {
+      setPhase('discussion');
+      setTimeRemaining(session.discussion_time * 5); 
+    } else if (phase === 'discussion') {
+      setPhase('survey');
+      setTimeRemaining(session.survey_time * 5);
+    } else {
+      navigation.navigate('Survey', { 
+        sessionId: sessionId,
+        members: [] 
+      });
+    }
+  };
+
+  const getPhaseIcon = (currentPhase) => {
+    switch (currentPhase) {
+      case 'prep': return 'psychology';
+      case 'discussion': return 'forum';
+      case 'survey': return 'quiz';
+      default: return 'schedule';
+    }
+  };
+
+  const getPhaseColors = (currentPhase) => {
+    switch (currentPhase) {
+      case 'prep': return ['#FF9800', '#F57C00'];
+      case 'discussion': return ['#4CAF50', '#388E3C'];
+      case 'survey': return ['#2196F3', '#1976D2'];
+      default: return ['#9E9E9E', '#757575'];
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <View style={styles.loadingCard}>
+            <View style={styles.loadingIconContainer}>
+              <Icon name="hourglass-empty" size={48} color="#4F46E5" />
+            </View>
+            <Text style={styles.loadingTitle}>Loading Session</Text>
+            <Text style={styles.loadingSubtitle}>Preparing your discussion environment...</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  if (!sessionId || !session) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.errorContainer}>
+          <View style={styles.errorCard}>
+            <View style={styles.errorIconContainer}>
+              <Icon name="error-outline" size={64} color="#EF4444" />
+            </View>
+            <Text style={styles.errorTitle}>Session Not Found</Text>
+            <Text style={styles.errorSubtitle}>Unable to load session details</Text>
+            <TouchableOpacity 
+              style={styles.backButtonContainer}
+              onPress={() => navigation.goBack()}
+            >
+              <LinearGradient
+                colors={['#EF4444', '#DC2626']}
+                style={styles.backButtonGradient}
+              >
+                <Icon name="arrow-back" size={20} color="#fff" />
+                <Text style={styles.backButtonText}>Go Back</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      
+      <View style={styles.contentContainer}>
+        {/* Header Section */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Group Discussion</Text>
+          <Text style={styles.headerSubtitle}>Session in Progress</Text>
+        </View>
+
+        {/* Topic Card */}
+        <View style={styles.topicCard}>
+          <View style={styles.topicHeader}>
+            <View style={styles.topicIconContainer}>
+              <Icon name="lightbulb-outline" size={24} color="#4F46E5" />
+            </View>
+            <Text style={styles.topicLabel}>Discussion Topic</Text>
+          </View>
+          <Text style={styles.topic}>{topic}</Text>
+        </View>
+
+        {/* Timer Section */}
+        <View style={styles.timerSection}>
+          <View style={styles.timerContainer}>
+            <View style={styles.timerHeader}>
+              <Icon name="timer" size={32} color="#F8FAFC" />
+              <Text style={styles.timerTitle}>Time Remaining</Text>
+            </View>
+            <View style={styles.timerWrapper}>
+              <Timer 
+                duration={
+                  phase === 'prep' ? session.prep_time :
+                  phase === 'discussion' ? session.discussion_time :
+                  session.survey_time 
+                }
+                onComplete={handlePhaseComplete}
+                active={timerActive}
+                initialTimeRemaining={timeRemaining}
+                onTick={(remaining) => setTimeRemaining(remaining)}
+                textStyle={{ fontSize: 48, fontWeight: '800', color: '#FFFFFF' }}
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* Phase Progress Indicators */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressSteps}>
+            {['prep', 'discussion', 'survey'].map((stepPhase, index) => (
+              <View key={stepPhase} style={styles.stepContainer}>
+                <View style={[
+                  styles.stepCircle,
+                  phase === stepPhase && styles.stepCircleActive,
+                  index < ['prep', 'discussion', 'survey'].indexOf(phase) && styles.stepCircleCompleted
+                ]}>
+                  <LinearGradient
+                    colors={phase === stepPhase || index < ['prep', 'discussion', 'survey'].indexOf(phase) 
+                      ? getPhaseColors(stepPhase) 
+                      : ['#374151', '#4B5563']}
+                    style={styles.stepGradient}
+                  >
+                    <Icon 
+                      name={getPhaseIcon(stepPhase)} 
+                      size={26} 
+                      color={phase === stepPhase || index < ['prep', 'discussion', 'survey'].indexOf(phase) ? '#fff' : '#9CA3AF'} 
+                    />
+                  </LinearGradient>
+                </View>
+                <Text style={[
+                  styles.stepLabel,
+                  phase === stepPhase && styles.stepLabelActive
+                ]}>
+                  {stepPhase === 'prep' ? 'Prep' : 
+                   stepPhase === 'discussion' ? 'Discuss' : 'Survey'}
+                </Text>
+                {index < 2 && <View style={styles.stepConnector} />}
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Action Hints */}
+        <View style={styles.hintsContainer}>
+          <Icon name="info-outline" size={20} color="#4F46E5" />
+          <Text style={styles.hintsText}>
+            {phase === 'prep' ? 'Use this time to think about the topic and organize your thoughts' :
+             phase === 'discussion' ? 'Actively participate in the group discussion' :
+             'The survey will begin automatically when the timer ends'}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#030508ff',
+  },
+  contentContainer: {
+    flex: 1,
+    padding: 20,
+    paddingTop: 25,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  loadingCard: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 20,
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  loadingIconContainer: {
+    marginBottom: 20,
+  },
+  loadingTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    marginTop: 20,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  loadingSubtitle: {
+    fontSize: 16,
+    color: '#94A3B8',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  errorCard: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 20,
+    padding: 40,
+    alignItems: 'center',
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  errorIconContainer: {
+    marginBottom: 20,
+  },
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorSubtitle: {
+    fontSize: 16,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  backButtonContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    width: '100%',
+  },
+  backButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+  },
+  backButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  headerTitle: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#F8FAFC',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: '#94A3B8',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  topicCard: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  topicHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  topicIconContainer: {
+    marginRight: 12,
+  },
+  topicLabel: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#F8FAFC',
+  },
+  topic: {
+    fontSize: 16,
+    color: '#94A3B8',
+    lineHeight: 24,
+  },
+  timerSection: {
+    marginBottom: 24,
+  },
+  timerContainer: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 20,
+    padding: 32,
+    alignItems: 'center',
+    minHeight: 200,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  timerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  timerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    marginLeft: 12,
+  },
+  timerWrapper: {
+    width: '100%',
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+  },
+  progressContainer: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  progressSteps: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepContainer: {
+    alignItems: 'center',
+    position: 'relative',
+  },
+  stepCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  stepGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+    padding: 7,
+  },
+  stepLabelActive: {
+    color: '#F8FAFC',
+    fontWeight: '600',
+  },
+  stepConnector: {
+    position: 'absolute',
+    top: 20,
+    left: 40,
+    width: 40,
+    height: 2,
+    backgroundColor: '#334155',
+  },
+  hintsContainer: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  hintsText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#94A3B8',
+    marginLeft: 12,
+    lineHeight: 20,
+  },
+  timerText: {
+    fontSize: 48,
+    fontWeight: '800',
+    color: '#F8FAFC',
+  },
+});
+
+
+
+//////
+
+import React, { useState, useEffect } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ActivityIndicator, 
+  FlatList,
+  TouchableOpacity,
+  ImageBackground,
+  Image
+} from 'react-native';
+import api from '../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { globalStyles, colors, layout } from '../assets/globalStyles';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import LinearGradient from 'react-native-linear-gradient';
+import HamburgerHeader from '../components/HamburgerHeader';
+
+export default function LobbyScreen({ navigation, route }) {
+    const { sessionId } = route.params;
+    const [participants, setParticipants] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [isReady, setIsReady] = useState(false);
+
+    const fetchParticipants = async () => {
+        try {
+            const token = await AsyncStorage.getItem('token');
+            if (!token) {
+                throw new Error('No authentication token found');
+            }
+
+            const response = await api.get('/student/session/participants', { 
+                params: { session_id: sessionId },
+                headers: {
+                    Authorization: `Bearer ${token.replace(/['"]+/g, '')}`
+                },
+                validateStatus: function (status) {
+                    return status === 200 || status === 404;
+                }
+            });
+            
+            if (response.status === 404) {
+                setParticipants([]);
+            } else {
+                setParticipants(response.data?.data || []);
+            }
+        } catch (error) {
+            console.error('Error fetching participants:', error);
+            setParticipants([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        // Initial fetch
+        fetchParticipants();
+
+        // Poll every 5 seconds
+        const interval = setInterval(fetchParticipants, 5000);
+
+        return () => {
+            clearInterval(interval);
+        };
+    }, [sessionId]);
+
+    const handleReady = async () => {
+        try {
+            setIsReady(true);
+            const token = await AsyncStorage.getItem('token');
+            if (!token) {
+                throw new Error('No authentication token found');
+            }
+
+            await api.put('/student/session/status', { 
+                sessionId, 
+                status: 'active'
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token.replace(/['"]+/g, '')}`
+                }
+            });
+            
+            navigation.replace('GdSession', { sessionId });
+        } catch (error) {
+            console.error('Error starting session:', error);
+            setIsReady(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <View style={styles.container}>
+                <View style={styles.loadingContainer}>
+                    <View style={styles.loadingCard}>
+                        <ActivityIndicator size="large" color="#4F46E5" />
+                        <Text style={styles.loadingTitle}>Joining Session</Text>
+                        <Text style={styles.loadingSubtitle}>Please wait while we set up your lobby...</Text>
+                    </View>
+                </View>
+            </View>
+        );
+    }
+
+   const renderParticipantItem = ({ item, index }) => (
+    <View style={styles.participantCard}>
+        <View style={styles.participantHeader}>
+            <View style={styles.participantAvatar}>
+                {item.profileImage ? (
+                    <Image
+                        source={{ uri: item.profileImage }}
+                        style={styles.avatarImage}
+                        onError={(e) => {
+                            // Fallback to gradient avatar if image fails to load
+                            console.log('Image load error:', e.nativeEvent.error);
+                        }}
+                    />
+                ) : (
+                    <LinearGradient
+                        colors={['#4F46E5', '#7C3AED']}
+                        style={styles.avatarGradient}
+                    >
+                        <Icon name="person" size={20} color="#fff" />
+                    </LinearGradient>
+                )}
+            </View>
+            <View style={styles.participantInfo}>
+                <Text style={styles.participantName}>{item.name}</Text>
+                {item.department && (
+                    <Text style={styles.participantDept}>{item.department}</Text>
+                )}
+            </View>
+            <View style={styles.onlineIndicator}>
+                <View style={styles.onlineDot} />
+                <Text style={styles.onlineText}>Online</Text>
+            </View>
+        </View>
+    </View>
+);
+
+    return (
+        <View style={styles.container}>
+            <HamburgerHeader/>
+            <View style={styles.contentContainer}>
+                {/* Header Section */}
+                <View style={styles.header}>
+                    <Text style={styles.title}>Session Lobby</Text>
+                    <Text style={styles.subtitle}>Waiting for participants to join...</Text>
+                </View>
+
+                {/* Stats Section */}
+                <View style={styles.statsContainer}>
+                    <View style={styles.statsRow}>
+                        <View style={styles.statItem}>
+                            <View style={styles.statIconContainer}>
+                                <Icon name="group" size={24} color="#4F46E5" />
+                            </View>
+                            <Text style={styles.statNumber}>{participants.length}</Text>
+                            <Text style={styles.statLabel}>Participants</Text>
+                        </View>
+                        <View style={styles.statDivider} />
+                        <View style={styles.statItem}>
+                            <View style={styles.statIconContainer}>
+                                <Icon name="schedule" size={24} color="#4F46E5" />
+                            </View>
+                            <Text style={styles.statNumber}>5s</Text>
+                            <Text style={styles.statLabel}>Auto Refresh</Text>
+                        </View>
+                        <View style={styles.statDivider} />
+                        <View style={styles.statItem}>
+                            <View style={styles.statIconContainer}>
+                                <Icon name="wifi" size={24} color="#10B981" />
+                            </View>
+                            <Text style={styles.statNumber}>Live</Text>
+                            <Text style={styles.statLabel}>Status</Text>
+                        </View>
+                    </View>
+                </View>
+                
+                {/* Participants Section */}
+                <View style={styles.participantsContainer}>
+                    <View style={styles.participantsHeader}>
+                        <Text style={styles.participantsTitle}>
+                            Participants ({participants.length})
+                        </Text>
+                        <View style={styles.refreshIndicator}>
+                            <Icon name="sync" size={16} color="#94A3B8" />
+                        </View>
+                    </View>
+                    
+                    <View style={styles.participantsList}>
+                        {participants.length > 0 ? (
+                            <FlatList
+                                data={participants}
+                                keyExtractor={item => item.id}
+                                renderItem={renderParticipantItem}
+                                showsVerticalScrollIndicator={false}
+                                contentContainerStyle={styles.listContent}
+                            />
+                        ) : (
+                            <View style={styles.emptyContainer}>
+                                <View style={styles.emptyIconContainer}>
+                                    <Icon name="person-add" size={48} color="#6B7280" />
+                                </View>
+                                <Text style={styles.emptyTitle}>Waiting for Others</Text>
+                                <Text style={styles.emptyText}>
+                                    Other participants will appear here when they join the session
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+                </View>
+
+                {/* Ready Button */}
+                <View style={styles.bottomContainer}>
+                    <TouchableOpacity 
+                        style={[
+                            styles.readyButton,
+                            isReady && styles.readyButtonDisabled
+                        ]}
+                        onPress={handleReady}
+                        disabled={isReady}
+                        activeOpacity={0.8}
+                    >
+                        <LinearGradient
+                            colors={isReady ? ['#6B7280', '#4B5563'] : ['#10B981', '#059669']}
+                            start={{x: 0, y: 0}}
+                            end={{x: 1, y: 1}}
+                            style={styles.readyButtonGradient}
+                        >
+                            <View style={styles.readyButtonContent}>
+                                {isReady ? (
+                                    <>
+                                        <ActivityIndicator size="small" color="#fff" />
+                                        <Text style={styles.readyButtonText}>Starting Session...</Text>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Icon name="play-arrow" size={24} color="#fff" />
+                                        <Text style={styles.readyButtonText}>I'm Ready</Text>
+                                    </>
+                                )}
+                            </View>
+                        </LinearGradient>
+                    </TouchableOpacity>
+                    
+                    <Text style={styles.readyHint}>
+                        {isReady ? 'Launching your session...' : 'Tap when you\'re ready to begin'}
+                    </Text>
+                </View>
+            </View>
+        </View>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#030508ff',
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 40,
+    },
+    loadingCard: {
+        backgroundColor: '#090d13ff',
+        borderRadius: 20,
+        paddingVertical: 40,
+        paddingHorizontal: 32,
+        alignItems: 'center',
+        width: '100%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    loadingTitle: {
+        fontSize: 22,
+        fontWeight: '700',
+        color: '#F8FAFC',
+        marginTop: 20,
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    loadingSubtitle: {
+        fontSize: 16,
+        color: '#94A3B8',
+        textAlign: 'center',
+        lineHeight: 22,
+    },
+    contentContainer: {
+        flex: 1,
+        padding: 20,
+        paddingTop: 25,
+    },
+    header: {
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    title: {
+        fontSize: 32,
+        fontWeight: '800',
+        color: '#F8FAFC',
+        textAlign: 'center',
+        marginBottom: 8,
+    },
+    subtitle: {
+        fontSize: 16,
+        color: '#94A3B8',
+        textAlign: 'center',
+        fontWeight: '500',
+    },
+    statsContainer: {
+        backgroundColor: '#090d13ff',
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    statsRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    statItem: {
+        alignItems: 'center',
+        flex: 1,
+    },
+    statIconContainer: {
+        marginBottom: 8,
+    },
+    statNumber: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#F8FAFC',
+        marginBottom: 4,
+    },
+    statLabel: {
+        fontSize: 12,
+        color: '#64748B',
+        fontWeight: '500',
+    },
+    statDivider: {
+        width: 1,
+        height: 40,
+        backgroundColor: '#334155',
+        marginHorizontal: 16,
+    },
+    participantsContainer: {
+        flex: 1,
+        marginBottom: 20,
+    },
+    participantsHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    participantsTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#F8FAFC',
+    },
+    refreshIndicator: {
+        padding: 6,
+    },
+    participantsList: {
+        flex: 1,
+    },
+    listContent: {
+        paddingBottom: 10,
+    },
+    participantCard: {
+        backgroundColor: '#090d13ff',
+        marginBottom: 12,
+        borderRadius: 16,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    participantHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    participantAvatar: {
+        borderRadius: 20,
+        overflow: 'hidden',
+        marginRight: 12,
+    },
+    avatarGradient: {
+        width: 40,
+        height: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    avatarImage: {
+        width: 40,
+        height: 40,
+    },
+    participantInfo: {
+        flex: 1,
+    },
+    participantName: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#F8FAFC',
+        marginBottom: 2,
+    },
+    participantDept: {
+        fontSize: 14,
+        color: '#94A3B8',
+        fontWeight: '400',
+    },
+    onlineIndicator: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    onlineDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#10B981',
+        marginRight: 6,
+    },
+    onlineText: {
+        fontSize: 12,
+        color: '#94A3B8',
+        fontWeight: '500',
+    },
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#090d13ff',
+        borderRadius: 16,
+        paddingVertical: 40,
+        paddingHorizontal: 32,
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    emptyIconContainer: {
+        marginBottom: 16,
+    },
+    emptyTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#F8FAFC',
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    emptyText: {
+        fontSize: 14,
+        color: '#64748B',
+        textAlign: 'center',
+        lineHeight: 20,
+    },
+    bottomContainer: {
+        alignItems: 'center',
+    },
+    readyButton: {
+        width: '100%',
+        borderRadius: 16,
+        overflow: 'hidden',
+        marginBottom: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.4,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    readyButtonDisabled: {
+        opacity: 0.7,
+    },
+    readyButtonGradient: {
+        paddingVertical: 18,
+        paddingHorizontal: 24,
+    },
+    readyButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    readyButtonText: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: '700',
+        marginLeft: 8,
+    },
+    readyHint: {
+        fontSize: 14,
+        color: '#64748B',
+        textAlign: 'center',
+        fontStyle: 'italic',
+    },
+});
+
+
+
+///////
+
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, PermissionsAndroid, Platform, Alert } from 'react-native';
+import { Camera, useCameraDevice, useCameraPermission, useCodeScanner } from 'react-native-vision-camera';
+import auth from '../services/auth';
+import api from '../services/api';
+import { useIsFocused } from '@react-navigation/native';
+import HamburgerHeader from '../components/HamburgerHeader';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+
+export default function QrScannerScreen({ navigation }) {
+  const [hasPermission, setHasPermission] = useState(false);
+  const [isActive, setIsActive] = useState(true);
+  const [error, setError] = useState(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const camera = useRef(null);
+  const device = useCameraDevice('back');
+  const { hasPermission: cameraPermission, requestPermission } = useCameraPermission();
+  const isFocused = useIsFocused();
+
+  const codeScanner = useCodeScanner({
+    codeTypes: ['qr'],
+
+    onCodeScanned: async (codes) => {
+      if (codes.length > 0 && isActive && isFocused) {
+        setIsActive(false);
+        setIsScanning(true);
+        const qrData = codes[0].value;
+        
+        try {
+          const authData = await auth.getAuthData();
+          
+          if (!authData?.token) {
+            throw new Error('Authentication required - please login again');
+          }
+
+          const response = await api.student.joinSession({ qr_data: qrData });
+
+          if (response?.data?.error) {
+            throw new Error(response.data.error);
+          }
+
+          if (!response?.data?.session_id) {
+            throw new Error('Failed to join session - invalid response');
+          }
+
+          // Navigate to lobby instead of directly to session
+          navigation.navigate('Lobby', { 
+            sessionId: response.data.session_id 
+          });
+          
+        } catch (error) {
+          console.error('QR Scan Error:', error);
+          setIsActive(true);
+          setIsScanning(false);
+          Alert.alert(
+            'Session Error',
+            error.message || 'Failed to join session',
+            [{ 
+              text: 'OK', 
+              onPress: () => {
+                setIsActive(true);
+                setIsScanning(false);
+              }
+            }]
+          );
+        }
+      }
+    }
+  });
+
+  useEffect(() => {
+    const requestCameraPermission = async () => {
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          {
+            title: "Camera Permission",
+            message: "App needs access to your camera",
+            buttonNeutral: "Ask Me Later",
+            buttonNegative: "Cancel",
+            buttonPositive: "OK"
+          }
+        );
+        setHasPermission(granted === PermissionsAndroid.RESULTS.GRANTED);
+      } else {
+        if (!cameraPermission) {
+          const permission = await requestPermission();
+          setHasPermission(permission);
+        } else {
+          setHasPermission(true);
+        }
+      }
+    };
+    requestCameraPermission();
+  }, [cameraPermission]);
+
+  if (!hasPermission) {
+    return (
+      <View style={styles.permissionContainer}>
+        <View style={styles.permissionContent}>
+          <View style={styles.permissionIconContainer}>
+            <Icon name="camera-alt" size={64} color="#64748B" />
+          </View>
+          <Text style={styles.permissionTitle}>Camera Access Required</Text>
+          <Text style={styles.permissionSubtitle}>
+            We need camera permission to scan QR codes and help you join sessions
+          </Text>
+          <TouchableOpacity
+            style={styles.permissionButton}
+            onPress={async () => {
+              if (Platform.OS === 'android') {
+                const granted = await PermissionsAndroid.request(
+                  PermissionsAndroid.PERMISSIONS.CAMERA
+                );
+                setHasPermission(granted === PermissionsAndroid.RESULTS.GRANTED);
+              } else {
+                const permission = await requestPermission();
+                setHasPermission(permission);
+              }
+            }}
+          >
+            <Icon name="camera" size={18} color="#fff" />
+            <Text style={styles.permissionButtonText}>Grant Permission</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  if (!device) {
+    return (
+      <View style={styles.permissionContainer}>
+        <View style={styles.permissionContent}>
+          <View style={styles.permissionIconContainer}>
+            <Icon name="camera-off" size={64} color="#64748B" />
+          </View>
+          <Text style={styles.permissionTitle}>Camera Not Available</Text>
+          <Text style={styles.permissionSubtitle}>
+            Unable to access camera device. Please check your device settings.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <Camera
+        ref={camera}
+        style={StyleSheet.absoluteFill}
+        device={device}
+        isActive={isActive && isFocused}
+        codeScanner={codeScanner}
+        torch={'off'}
+        zoom={1}
+      />
+
+      <View style={styles.overlay}>
+        <View style={styles.scannerContainer}>
+          <View style={styles.scannerFrame}>
+            {/* Corner Borders */}
+            <View style={[styles.corner, styles.topLeft]} />
+            <View style={[styles.corner, styles.topRight]} />
+            <View style={[styles.corner, styles.bottomLeft]} />
+            <View style={[styles.corner, styles.bottomRight]} />
+            
+            {/* Scanning Animation */}
+            {isScanning && (
+              <View style={styles.scanningOverlay}>
+                <View style={styles.scanningLine} />
+              </View>
+            )}
+            
+            {/* QR Icon in center when not scanning */}
+            {!isScanning && (
+              <View style={styles.qrIconContainer}>
+                <Icon name="qr-code-scanner" size={48} color="rgba(248,250,252,0.6)" />
+              </View>
+            )}
+          </View>
+          
+          <View style={styles.instructionContainer}>
+            <Text style={styles.instructionTitle}>
+              {isScanning ? 'Processing...' : 'Position QR Code'}
+            </Text>
+            <Text style={styles.instructionText}>
+              {isScanning ? 'Please wait while we process the QR code' : 'Align the QR code within the frame to scan'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Bottom Actions */}
+        <View style={styles.bottomActions}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.cancelButton]}
+            onPress={() => navigation.goBack()}
+          >
+            <Icon name="close" size={18} color="#F8FAFC" />
+            <Text style={styles.actionButtonText}>Cancel</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.actionButton, isActive ? styles.pauseButton : styles.resumeButton]}
+            onPress={() => {
+              setIsActive(!isActive);
+            }}
+          >
+            <Icon name={isActive ? "pause" : "play-arrow"} size={18} color="#fff" />
+            <Text style={styles.actionButtonText}>
+              {isActive ? 'Pause' : 'Resume'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Error Display */}
+        {error && (
+          <View style={styles.errorContainer}>
+            <View style={styles.errorContent}>
+              <Icon name="error-outline" size={20} color="#EF4444" />
+              <Text style={styles.errorText}>{error}</Text>
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={() => {
+                  setError(null);
+                  setIsActive(true);
+                  setIsScanning(false);
+                }}
+              >
+                <Icon name="refresh" size={16} color="#4F46E5" />
+                <Text style={styles.retryButtonText}>Try Again</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  permissionContainer: {
+    flex: 1,
+    backgroundColor: '#030508ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  permissionContent: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  permissionIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 16,
+    backgroundColor: '#090d13ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 32,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  permissionTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  permissionSubtitle: {
+    fontSize: 16,
+    color: '#94A3B8',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 32,
+  },
+  permissionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4F46E5',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    width: '100%',
+  },
+  permissionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 20,
+    backgroundColor: 'rgba(15,23,42,0.9)',
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: 'rgba(30,41,59,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(51,65,85,0.6)',
+  },
+  headerTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#F8FAFC',
+  },
+  headerSpacer: {
+    width: 44,
+  },
+  scannerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  scannerFrame: {
+    width: 280,
+    height: 280,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  corner: {
+    position: 'absolute',
+    width: 32,
+    height: 32,
+    borderColor: '#4F46E5',
+    borderWidth: 3,
+  },
+  topLeft: {
+    top: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderBottomWidth: 0,
+    borderTopLeftRadius: 8,
+  },
+  topRight: {
+    top: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderBottomWidth: 0,
+    borderTopRightRadius: 8,
+  },
+  bottomLeft: {
+    bottom: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 8,
+  },
+  bottomRight: {
+    bottom: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderTopWidth: 0,
+    borderBottomRightRadius: 8,
+  },
+  scanningOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+  },
+  scanningLine: {
+    height: 3,
+    width: '100%',
+    backgroundColor: '#10B981',
+    shadowColor: '#10B981',
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  qrIconContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  instructionContainer: {
+    marginTop: 48,
+    alignItems: 'center',
+    backgroundColor: 'rgba(15,23,42,0.8)',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(51,65,85,0.3)',
+  },
+  instructionTitle: {
+    color: '#F8FAFC',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  instructionText: {
+    color: '#94A3B8',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  bottomActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+    backgroundColor: 'rgba(15,23,42,0.9)',
+    paddingTop: 20,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    flex: 0.48,
+    borderWidth: 1,
+  },
+  cancelButton: {
+    backgroundColor: '#374151',
+    borderColor: '#4B5563',
+  },
+  pauseButton: {
+    backgroundColor: '#DC2626',
+    borderColor: '#EF4444',
+  },
+  resumeButton: {
+    backgroundColor: '#059669',
+    borderColor: '#10B981',
+  },
+  actionButtonText: {
+    color: '#F8FAFC',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  errorContainer: {
+    position: 'absolute',
+    bottom: 120,
+    left: 20,
+    right: 20,
+    backgroundColor: '#090d13ff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#EF4444',
+  },
+  errorContent: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    color: '#F8FAFC',
+    fontSize: 16,
+    textAlign: 'center',
+    marginVertical: 12,
+    lineHeight: 22,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#090d13ff',
+    borderColor: '#4F46E5',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginTop: 8,
+  },
+  retryButtonText: {
+    color: '#4F46E5',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+});
+
+
+
+
+///////
+
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, Image, Modal, ActivityIndicator, TouchableOpacity } from 'react-native';
+import api from '../services/api';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import LinearGradient from 'react-native-linear-gradient';
+import HamburgerHeader from '../components/HamburgerHeader';
+
+const ResultItem = ({ item, index }) => {
+  // Ensure numeric values
+  const totalScore = typeof item.total_score === 'string' ? 
+    parseFloat(item.total_score) : item.total_score || 0;
+  const penaltyPoints = typeof item.penalty_points === 'string' ? 
+    parseFloat(item.penalty_points) : item.penalty_points || 0;
+  const finalScore = typeof item.final_score === 'string' ? 
+    parseFloat(item.final_score) : totalScore - penaltyPoints;
+  const biasedQuestions = item.biased_questions || 0;
+  
+  // Use the photo_url from the item, fallback to avatar API
+  const profileImage = item.photo_url || 
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=random&color=fff`;
+  
+  const [showPenaltyDetails, setShowPenaltyDetails] = useState(false);
+
+  const getRankColors = (position) => {
+    switch (position) {
+      case 0: return ['#FFD700', '#FFA000']; // Gold
+      case 1: return ['#C0C0C0', '#9E9E9E']; // Silver
+      case 2: return ['#CD7F32', '#8D6E63']; // Bronze
+      default: return ['#4F46E5', '#7C3AED']; // Purple gradient
+    }
+  };
+
+  // Generate penalty details based on biased questions count
+ const penaltyDetails = biasedQuestions > 0 ? [
+    { 
+      points: penaltyPoints, 
+      reason: `${biasedQuestions} biased ranking(s)`, 
+      description: 'Deviated significantly from consensus ratings'
+    }
+  ] : [];
+
+ 
+  return (
+    <View style={[styles.resultItem, { opacity: 0.9 + (index * 0.01) }]}>
+      <View style={styles.resultCard}>
+        <View style={styles.resultHeader}>
+          <View style={styles.rankContainer}>
+            <LinearGradient
+              colors={getRankColors(index)}
+              style={styles.rankBadge}
+            >
+              <Text style={styles.rankText}>{index + 1}</Text>
+            </LinearGradient>
+          </View>
+          
+          <View style={styles.profileContainer}>
+            <Image
+              source={{ uri: profileImage }}
+              style={styles.profileImage}
+              onError={() => console.log('Image load error')}
+            />
+          </View>
+          
+          <View style={styles.detailsContainer}>
+            <Text style={styles.nameText}>{item.name}</Text>
+            
+            {/* Scores Container */}
+            <View style={styles.scoresContainer}>
+              {/* Total Score */}
+              <View style={styles.scoreItem}>
+                <Icon name="add-circle" size={16} color="#10B981" />
+                <Text style={styles.scoreText}>{totalScore.toFixed(1)}</Text>
+              </View>
+              
+              {/* Penalty Points */}
+              {penaltyPoints > 0 && (
+                <View style={styles.scoreItem}>
+                  <Icon name="remove-circle" size={16} color="#EF4444" />
+                  <Text style={styles.penaltyText}>-{penaltyPoints.toFixed(1)}</Text>
+                  <TouchableOpacity 
+                    onPress={() => setShowPenaltyDetails(!showPenaltyDetails)}
+                    style={styles.penaltyInfoButton}
+                  >
+                    <Icon name="info-outline" size={14} color="#F59E0B" />
+                  </TouchableOpacity>
+                </View>
+              )}
+              
+              {/* Final Score */}
+              <View style={styles.finalScoreContainer}>
+                <Text style={styles.finalScoreText}>{finalScore.toFixed(1)}</Text>
+                <Text style={styles.finalScoreLabel}>Final</Text>
+              </View>
+            </View>
+
+            {/* Penalty Details */}
+            {showPenaltyDetails && penaltyPoints > 0 && (
+              <View style={styles.penaltyDetailsContainer}>
+                <View style={styles.penaltyDetailItem}>
+                  <Icon name="warning" size={14} color="#F59E0B" />
+                  <Text style={styles.penaltyDetailText}>
+                    {biasedQuestions} biased ranking{biasedQuestions !== 1 ? 's' : ''}
+                  </Text>
+                </View>
+                <View style={styles.penaltyDetailItem}>
+                  <Icon name="error-outline" size={12} color="#EF4444" />
+                  <Text style={styles.penaltyDetailSmallText}>
+                    Ratings differed significantly from group consensus
+                  </Text>
+                </View>
+                <View style={styles.penaltyDetailItem}>
+                  <Icon name="info-outline" size={12} color="#3B82F6" />
+                  <Text style={styles.penaltyDetailSmallText}>
+                    -1 point per significant deviation
+                  </Text>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+export default function ResultsScreen({ route, navigation }) {
+  const { sessionId } = route.params;
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showPenaltyInfo, setShowPenaltyInfo] = useState(false);
+
+  useEffect(() => {
+    const fetchResults = async () => {
+      try {
+        setLoading(true);
+        const response = await api.student.getResults(sessionId);
+        
+        console.log('Results API response:', response.data);
+        
+        if (response.data?.results) {
+          // Process results to ensure correct data types
+          const processedResults = response.data.results
+            .map(item => ({
+              ...item,
+              // Ensure numeric values - handle both string and number types
+              total_score: typeof item.total_score === 'string' ? 
+                parseFloat(item.total_score) : item.total_score || 0,
+              penalty_points: typeof item.penalty_points === 'string' ? 
+                parseFloat(item.penalty_points) : item.penalty_points || 0,
+              final_score: typeof item.final_score === 'string' ? 
+                parseFloat(item.final_score) : 
+                (item.total_score || 0) - (item.penalty_points || 0),
+              biased_questions: item.biased_questions || 0
+            }))
+            // Sort by final_score descending as backup
+            .sort((a, b) => b.final_score - a.final_score);
+          
+          setResults(processedResults);
+        } else {
+          setError('No results available for this session');
+        }
+      } catch (err) {
+        setError('Failed to load results');
+        console.error('Results error:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchResults();
+  }, [sessionId]);
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color="#4F46E5" />
+            <Text style={styles.loadingTitle}>Loading Results</Text>
+            <Text style={styles.loadingSubtitle}>Please wait while we fetch the session results...</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.errorContainer}>
+          <View style={styles.errorCard}>
+            <View style={styles.errorIconContainer}>
+              <Icon name="error-outline" size={64} color="#64748B" />
+            </View>
+            <Text style={styles.errorTitle}>Unable to Load Results</Text>
+            <Text style={styles.errorSubtitle}>{error}</Text>
+            <TouchableOpacity 
+              style={styles.backButtonContainer}
+              onPress={() => navigation.goBack()}
+            >
+              <LinearGradient
+                colors={['#EF4444', '#DC2626']}
+                style={styles.backButtonGradient}
+              >
+                <Icon name="arrow-back" size={20} color="#fff" />
+                <Text style={styles.backButtonText}>Go Back</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+    return (
+    <View style={styles.container}>
+      <HamburgerHeader title="Session Results" />
+      <View style={styles.contentContainer}>
+        {/* Header Section */}
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <View>
+              <Text style={styles.title}>Session Results</Text>
+              <Text style={styles.subtitle}>Final rankings and scores</Text>
+            </View>
+          </View>
+          <TouchableOpacity 
+            onPress={() => setShowPenaltyInfo(true)}
+            style={styles.infoButton}
+          >
+            <Icon name="info" size={24} color="#94A3B8" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Stats Section */}
+        <View style={styles.statsContainer}>
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <View style={styles.statIconContainer}>
+                <Icon name="group" size={24} color="#4F46E5" />
+              </View>
+              <Text style={styles.statNumber}>{results.length}</Text>
+              <Text style={styles.statLabel}>Participants</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <View style={styles.statIconContainer}>
+                <Icon name="emoji-events" size={24} color="#F59E0B" />
+              </View>
+              <Text style={styles.statNumber}>
+                {results.length > 0 ? results[0].final_score?.toFixed(1) || '0.0' : '0.0'}
+              </Text>
+              <Text style={styles.statLabel}>Top Score</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <View style={styles.statIconContainer}>
+                <Icon name="check-circle" size={24} color="#10B981" />
+              </View>
+              <Text style={styles.statNumber}>Completed</Text>
+              <Text style={styles.statLabel}>Status</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Results List */}
+        <View style={styles.resultsContainer}>
+          <View style={styles.resultsHeader}>
+            <Text style={styles.resultsTitle}>
+              Final Rankings ({results.length})
+            </Text>
+          </View>
+          
+          <View style={styles.resultsList}>
+            {results.length > 0 ? (
+              <FlatList
+                data={results}
+                keyExtractor={(item, index) => item.student_id || `result-${index}`}
+                renderItem={({ item, index }) => <ResultItem item={item} index={index} />}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.listContent}
+              />
+            ) : (
+              <View style={styles.emptyContainer}>
+                <View style={styles.emptyIconContainer}>
+                  <Icon name="assessment" size={48} color="#6B7280" />
+                </View>
+                <Text style={styles.emptyTitle}>No Results Available</Text>
+                <Text style={styles.emptyText}>
+                  Results for this session are not yet available
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Bottom feedback section */}
+        <View style={styles.bottomContainer}>
+          <TouchableOpacity 
+            style={styles.feedbackButton}
+            onPress={() => navigation.navigate('Feedback', { sessionId })}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={['#F59E0B', '#D97706']}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 1}}
+              style={styles.feedbackButtonGradient}
+            >
+              <View style={styles.feedbackButtonContent}>
+                <Icon name="feedback" size={24} color="#fff" />
+                <Text style={styles.feedbackButtonText}>Give Feedback</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+          
+          <Text style={styles.feedbackHint}>
+            Help us improve your experience
+          </Text>
+        </View>
+      </View>
+
+      {/* Penalty Info Modal */}
+{showPenaltyInfo && (
+  <Modal
+    visible={showPenaltyInfo}
+    transparent={true}
+    animationType="slide"
+    onRequestClose={() => setShowPenaltyInfo(false)}
+  >
+    <View style={styles.modalOverlay}>
+      <View style={styles.modalContent}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Penalty System</Text>
+          <TouchableOpacity 
+            onPress={() => setShowPenaltyInfo(false)}
+            style={styles.closeButton}
+          >
+            <Icon name="close" size={24} color="#F8FAFC" />
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.modalBody}>
+          <Text style={styles.modalDescription}>
+            Penalties are applied when your ratings differ significantly from the group consensus:
+          </Text>
+          
+          <View style={styles.penaltyRule}>
+            <Icon name="warning" size={20} color="#F59E0B" />
+            <Text style={styles.penaltyRuleText}>
+              Deviation ≥ 2 points from average: -1 point per occurrence
+            </Text>
+          </View>
+          
+          <View style={styles.penaltyRule}>
+            <Icon name="info" size={20} color="#3B82F6" />
+            <Text style={styles.penaltyRuleText}>
+              Average is calculated excluding self-ratings
+            </Text>
+          </View>
+          
+          <View style={styles.penaltyRule}>
+            <Icon name="group" size={20} color="#10B981" />
+            <Text style={styles.penaltyRuleText}>
+              Designed to encourage fair and consistent evaluations
+            </Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  </Modal>
+)}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#030508ff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  loadingCard: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 20,
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  loadingTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    marginTop: 20,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  loadingSubtitle: {
+    fontSize: 16,
+    color: '#94A3B8',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  errorCard: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 20,
+    padding: 40,
+    alignItems: 'center',
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  errorIconContainer: {
+    marginBottom: 20,
+  },
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorSubtitle: {
+    fontSize: 16,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  backButtonContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    width: '100%',
+  },
+  backButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+  },
+  backButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  contentContainer: {
+    flex: 1,
+    padding: 20,
+    paddingTop: 25,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#F8FAFC',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#94A3B8',
+    fontWeight: '500',
+  },
+  infoButton: {
+    padding: 8,
+  },
+  statsContainer: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statIconContainer: {
+    marginBottom: 8,
+  },
+  statNumber: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#334155',
+    marginHorizontal: 16,
+  },
+  resultsContainer: {
+    flex: 1,
+    marginBottom: 20,
+  },
+  resultsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  resultsTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#F8FAFC',
+  },
+  resultsList: {
+    flex: 1,
+  },
+  listContent: {
+    paddingBottom: 10,
+  },
+  resultItem: {
+    marginBottom: 12,
+  },
+  resultCard: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  resultHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  rankContainer: {
+    alignItems: 'center',
+    marginRight: 16,
+    minWidth: 60,
+  },
+  rankBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rankText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+  profileContainer: {
+    marginRight: 12,
+  },
+  profileImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  detailsContainer: {
+    flex: 1,
+  },
+  nameText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    marginBottom: 8,
+  },
+  scoresContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  scoreItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  scoreText: {
+    fontSize: 14,
+    color: '#10B981',
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  penaltyText: {
+    fontSize: 14,
+    color: '#EF4444',
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  penaltyInfoButton: {
+    marginLeft: 4,
+    padding: 4,
+  },
+  finalScoreContainer: {
+    alignItems: 'center',
+    backgroundColor: '#334155',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  finalScoreText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#F8FAFC',
+  },
+  finalScoreLabel: {
+    fontSize: 10,
+    color: '#94A3B8',
+    fontWeight: '500',
+  },
+  penaltyDetailsContainer: {
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: '#374151',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#4B5563',
+  },
+  penaltyDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  penaltyDetailText: {
+    color: '#F59E0B',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 6,
+    flex: 1,
+  },
+  penaltyDetailSmallText: {
+    color: '#D1D5DB',
+    fontSize: 11,
+    marginLeft: 6,
+    flex: 1,
+    fontStyle: 'italic',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#090d13ff',
+    borderRadius: 16,
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  emptyIconContainer: {
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#F8FAFC',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  bottomContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  feedbackButton: {
+    width: '100%',
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  feedbackButtonGradient: {
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+  },
+  feedbackButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedbackButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  feedbackHint: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 20,
+    padding: 20,
+    width: '90%',
+    maxHeight: '80%',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#F8FAFC',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  modalBody: {
+    gap: 16,
+  },
+  modalDescription: {
+    fontSize: 16,
+    color: '#94A3B8',
+    lineHeight: 22,
+  },
+  penaltyRule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#374151',
+    padding: 12,
+    borderRadius: 12,
+  },
+  penaltyRuleText: {
+    color: '#F8FAFC',
+    fontSize: 14,
+    marginLeft: 12,
+    flex: 1,
+  },
+});
+
+
+
+
+
+////////
+
+
+import React, { useState, useEffect } from 'react';
+import { View, FlatList, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
+import api from '../services/api';
+import auth from '../services/auth'; 
+import { globalStyles, colors, layout } from '../assets/globalStyles';
+import { useNavigation } from '@react-navigation/native';
+import FloatingActionButton from '../components/FloatingActionButton';
+import HamburgerHeader from '../components/HamburgerHeader';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import LinearGradient from 'react-native-linear-gradient';
+import StoryCircles from '../components/StoryCircles';
+import { ImageBackground } from 'react-native';
+export default function SessionBooking() {
+  const [venues, setVenues] = useState([]);
+  const [level, setLevel] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [selectedVenue, setSelectedVenue] = useState(null);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [cancelText, setCancelText] = useState('');
+  const [isBooked, setIsBooked] = useState(false);
+  const [bookedVenues, setBookedVenues] = useState([]);
+  const navigation = useNavigation();
+
+
+ const getVenueBackgroundImage = (venueId) => {
+  const backgroundImages = [
+    { uri: 'https://images.unsplash.com/photo-1518843018685-6abd8bc0cdd0?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' },
+    { uri: 'https://images.unsplash.com/photo-1582372692010-80f9fb012e90?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8ZGFya2VyJTIwdmVudWVzfGVufDB8fDB8fHww' },
+    { uri: 'https://plus.unsplash.com/premium_photo-1667428818575-20060a72b45c?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8OXx8ZGFya2VyJTIwcm9vbXN8ZW58MHx8MHx8fDA%3D' },
+    { uri: 'https://images.unsplash.com/photo-1651180594791-8fe66c360542?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NTB8fGRhcmtlciUyMHJvb21zfGVufDB8fDB8fHww' },
+    { uri: 'https://images.unsplash.com/photo-1639415033018-a08769eda4b4?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NTJ8fGRhcmtlciUyMHJvb21zfGVufDB8fDB8fHww' },
+  ];
+
+  let id;
+  if (typeof venueId === 'string') {
+    let hash = 0;
+    for (let i = 0; i < venueId.length; i++) {
+      hash = ((hash << 5) - hash) + venueId.charCodeAt(i);
+      hash = hash & hash;
+    }
+    id = Math.abs(hash);
+  } else {
+    id = venueId || 0;
+  }
+
+  const imageIndex = id % backgroundImages.length;
+  return backgroundImages[imageIndex];
+};
+
+  // Function to get different colors based on venue ID for subtle variety
+  const getVenueAccentColor = (venueId) => {
+    const accentColors = [
+      '#4F46E5', // Indigo
+      '#7C3AED', // Purple
+      '#2563EB', // Blue
+      '#059669', // Emerald
+      '#DC2626', // Red
+      '#EA580C', // Orange
+      '#0891B2', // Cyan
+      '#9333EA', // Violet
+      '#16A34A', // Green
+      '#C2410C', // Orange-red
+    ];
+    
+    let id;
+    if (typeof venueId === 'string') {
+      let hash = 0;
+      for (let i = 0; i < venueId.length; i++) {
+        hash = ((hash << 5) - hash) + venueId.charCodeAt(i);
+        hash = hash & hash;
+      }
+      id = Math.abs(hash);
+    } else {
+      id = venueId || 0;
+    }
+    
+    const colorIndex = id % accentColors.length;
+    return accentColors[colorIndex] || '#4F46E5';
+  };
+
+  // Function to get gradient colors for venue cards
+  const getVenueGradientColors = (venueId) => {
+    const baseColor = getVenueAccentColor(venueId);
+    // Create a darker version for gradient
+    const darkColor = baseColor + '15'; // 15% opacity
+    const lighterColor = baseColor + '25'; // 25% opacity
+    return [darkColor, lighterColor];
+  };
+
+  // Function to get line pattern type based on venue ID
+  const getPatternType = (venueId) => {
+    let id;
+    if (typeof venueId === 'string') {
+      let hash = 0;
+      for (let i = 0; i < venueId.length; i++) {
+        hash = ((hash << 5) - hash) + venueId.charCodeAt(i);
+        hash = hash & hash;
+      }
+      id = Math.abs(hash);
+    } else {
+      id = venueId || 0;
+    }
+    
+    const patterns = ['diagonal', 'grid', 'vertical', 'dots'];
+    return patterns[id % patterns.length];
+  };
+
+  // Function to render pattern overlay
+  const renderPatternOverlay = (venueId) => {
+    const patternType = getPatternType(venueId);
+    const accentColor = getVenueAccentColor(venueId);
+    
+    switch (patternType) {
+      case 'diagonal':
+        return (
+          <View style={styles.patternOverlay}>
+            {[...Array(8)].map((_, i) => (
+              <View 
+                key={i}
+                style={[
+                  styles.diagonalLine,
+                  { 
+                    backgroundColor: accentColor + '08',
+                    left: i * 40 - 20,
+                  }
+                ]} 
+              />
+            ))}
+          </View>
+        );
+      case 'grid':
+        return (
+          <View style={styles.patternOverlay}>
+            {[...Array(6)].map((_, i) => (
+              <View key={`h-${i}`}>
+                <View 
+                  style={[
+                    styles.horizontalLine,
+                    { 
+                      backgroundColor: accentColor + '06',
+                      top: i * 30,
+                    }
+                  ]} 
+                />
+              </View>
+            ))}
+            {[...Array(4)].map((_, i) => (
+              <View key={`v-${i}`}>
+                <View 
+                  style={[
+                    styles.verticalLine,
+                    { 
+                      backgroundColor: accentColor + '06',
+                      left: i * 80,
+                    }
+                  ]} 
+                />
+              </View>
+            ))}
+          </View>
+        );
+      case 'vertical':
+        return (
+          <View style={styles.patternOverlay}>
+            {[...Array(6)].map((_, i) => (
+              <View 
+                key={i}
+                style={[
+                  styles.verticalLine,
+                  { 
+                    backgroundColor: accentColor + '08',
+                    left: i * 50,
+                  }
+                ]} 
+              />
+            ))}
+          </View>
+        );
+      case 'dots':
+        return (
+          <View style={styles.patternOverlay}>
+            {[...Array(40)].map((_, i) => {
+              const row = Math.floor(i / 8);
+              const col = i % 8;
+              return (
+                <View 
+                  key={i}
+                  style={[
+                    styles.dot,
+                    { 
+                      backgroundColor: accentColor + '08',
+                      left: col * 40,
+                      top: row * 30,
+                    }
+                  ]} 
+                />
+              );
+            })}
+          </View>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const fetchVenues = async (lvl) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const authData = await auth.getAuthData();
+      if (!authData.token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await api.student.getSessions(lvl);
+      console.log('Venues API Response:', response.data);
+      
+      if (!response.data || response.data.length === 0) {
+        setError(`No venues found for level ${lvl}.`);
+      } else {
+        setVenues(response.data);
+        // Check booking status for each venue
+        const booked = [];
+        for (const venue of response.data) {
+          try {
+            const bookingResponse = await api.student.checkBooking(venue.id);
+            if (bookingResponse.data.is_booked) {
+              booked.push(venue.id);
+            }
+          } catch (error) {
+            console.error('Error checking booking for venue:', venue.id, error);
+          }
+        }
+        setBookedVenues(booked);
+      }
+    } catch (error) {
+      console.error('Venues fetch error:', error);
+      setError(error.response?.data?.error || error.message || 'Failed to load venues');
+      setVenues([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openVenueDetails = (venue) => {
+    setSelectedVenue(venue);
+    checkIfBooked(venue.id);
+    setIsModalVisible(true);
+  };
+
+  const checkIfBooked = async (venueId) => {
+    try {
+      const authData = await auth.getAuthData();
+      const response = await api.student.checkBooking(venueId);
+      setIsBooked(response.data.is_booked);
+    } catch (error) {
+      console.error('Check booking error:', error);
+      setIsBooked(false);
+    }
+  };
+
+  const handleBookVenue = async () => {
+    try {
+      setLoading(true);
+      const authData = await auth.getAuthData();
+      const studentLevel = parseInt(authData.level || 1);
+      
+      if (studentLevel !== selectedVenue.level) {
+        Alert.alert(
+          'Booking Failed',
+          `You can only book venues for your current level (Level ${studentLevel})`
+        );
+        return;
+      }
+      
+      const response = await api.student.bookVenue(selectedVenue.id);
+      
+      setBookedVenues([...bookedVenues, selectedVenue.id]);
+      Alert.alert(
+        'Booking Successful',
+        `You have successfully booked ${selectedVenue.venue_name}`,
+        [{ text: 'OK', onPress: () => {
+          fetchVenues(level);
+          setIsModalVisible(false);
+        }}]
+      );
+    } catch (error) {
+      let errorMessage = 'Failed to book venue';
+      if (error.response?.status === 409) {
+        errorMessage = 'You have already booked this venue';
+      } else if (error.response?.status === 403) {
+        errorMessage = 'You can only have one active booking at a time';
+      }
+      Alert.alert('Booking Failed', errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelBooking = async () => {
+    if (cancelText.toLowerCase() !== 'cancel') {
+      Alert.alert('Invalid Input', 'Please type "cancel" to confirm');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await api.student.cancelBooking(selectedVenue.id);
+      
+      setBookedVenues(bookedVenues.filter(id => id !== selectedVenue.id));
+      Alert.alert(
+        'Booking Cancelled',
+        `Your booking for ${selectedVenue.venue_name} has been cancelled`,
+        [{ text: 'OK', onPress: () => {
+          fetchVenues(level);
+          setIsModalVisible(false);
+          setCancelText('');
+        }}]
+      );
+    } catch (error) {
+      Alert.alert('Cancellation Failed', 'Failed to cancel booking. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchVenues(level);
+  }, [level]);
+
+  const handleLevelChange = (lvl) => {
+    setLevel(lvl);
+  };
+
+  const getAvailabilityColor = (remaining, capacity) => {
+    const percentage = (remaining / capacity) * 100;
+    if (percentage > 50) return '#10B981';
+    if (percentage > 20) return '#F59E0B';
+    return '#EF4444';
+  };
+
+  const renderVenueItem = ({ item }) => (
+    <TouchableOpacity 
+      style={[styles.venueCard, { borderLeftColor: getVenueAccentColor(item.id) }]}
+      onPress={() => openVenueDetails(item)}
+      disabled={loading}
+      activeOpacity={0.7}
+    >
+      <ImageBackground
+  source={getVenueBackgroundImage(item.id)}
+  style={styles.venueCardGradient}
+  imageStyle={styles.venueCardBackgroundImage}
+>
+  <LinearGradient
+    colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.6)']}
+    start={{x: 0, y: 0}}
+    end={{x: 0, y: 1}}
+    style={styles.venueCardOverlay}
+  >
+        {renderPatternOverlay(item.id)}
+        <View style={styles.cardContent}>
+          <View style={styles.cardHeader}>
+            <View style={styles.venueNameContainer}>
+              <View style={[styles.venueIconContainer, { backgroundColor: getVenueAccentColor(item.id) + '40' }]}>
+                <Icon name="place" size={18} color={getVenueAccentColor(item.id)} />
+              </View>
+              <Text style={styles.venueName}>{item.venue_name}</Text>
+            </View>
+            {bookedVenues.includes(item.id) && (
+              <View style={styles.bookedBadge}>
+                <Icon name="check-circle" size={14} color="#10B981" />
+                <Text style={styles.bookedBadgeText}>Booked</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.cardBody}>
+            <View style={styles.infoRow}>
+              <View style={styles.infoItem}>
+                <Icon name="schedule" size={16} color="#CBD5E1" />
+                <Text style={styles.infoLabel}>Timing</Text>
+                <Text style={styles.infoValue}>{item.session_timing || 'Not specified'}</Text>
+              </View>
+              
+              <View style={styles.infoItem}>
+                <Icon name="group" size={16} color="#CBD5E1" />
+                <Text style={styles.infoLabel}>Capacity</Text>
+                <Text style={styles.infoValue}>{item.capacity}</Text>
+              </View>
+            </View>
+
+            <View style={styles.availabilitySection}>
+              <View style={styles.availabilityHeader}>
+                <Text style={styles.availabilityLabel}>Available Spots</Text>
+                <Text style={[styles.availabilityNumber, { color: getAvailabilityColor(item.remaining, item.capacity) }]}>
+                  {item.remaining}
+                </Text>
+              </View>
+              <View style={styles.progressBarContainer}>
+                <View style={styles.progressBar}>
+                  <View 
+                    style={[
+                      styles.progressFill,
+                      { 
+                        width: `${(item.remaining / item.capacity) * 100}%`,
+                        backgroundColor: getAvailabilityColor(item.remaining, item.capacity)
+                      }
+                    ]} 
+                  />
+                </View>
+                <Text style={styles.progressText}>
+                  {Math.round((item.remaining / item.capacity) * 100)}%
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.cardFooter}>
+            <View style={styles.statusIndicator}>
+              <View style={[
+                styles.statusDot, 
+                { backgroundColor: item.remaining > 0 ? '#10B981' : '#EF4444' }
+              ]} />
+              <Text style={styles.statusText}>
+                {item.remaining > 0 ? 'Available' : 'Full'}
+              </Text>
+            </View>
+            <Icon name="keyboard-arrow-right" size={20} color="#CBD5E1" />
+          </View>
+        </View>
+      </LinearGradient>
+      </ImageBackground>
+    </TouchableOpacity>
+  );
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.content}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Session Booking</Text>
+          <Text style={styles.subtitle}>Find and book your discussion sessions</Text>
+        </View>
+<StoryCircles/>
+        <View style={styles.levelSelector}>
+          {[1, 2, 3].map((lvl) => (
+            <TouchableOpacity
+              key={lvl}
+              style={[
+                styles.levelButton,
+                level === lvl && styles.levelButtonActive
+              ]}
+              onPress={() => handleLevelChange(lvl)}
+              disabled={loading}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.levelButtonText,
+                level === lvl && styles.levelButtonTextActive
+              ]}>
+                Level {lvl}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <View style={styles.loadingCard}>
+              <ActivityIndicator size="large" color="#4F46E5" />
+              <Text style={styles.loadingText}>Loading venues...</Text>
+            </View>
+          </View>
+        ) : error ? (
+          <View style={styles.errorContainer}>
+            <View style={styles.errorCard}>
+              <Icon name="error-outline" size={48} color="#6B7280" />
+              <Text style={styles.errorText}>{error}</Text>
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={() => fetchVenues(level)}
+              >
+                <Icon name="refresh" size={18} color="#4F46E5" />
+                <Text style={styles.retryButtonText}>Try Again</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : venues.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyCard}>
+              <Icon name="event-busy" size={64} color="#4B5563" />
+              <Text style={styles.emptyTitle}>No Sessions Available</Text>
+              <Text style={styles.emptySubtitle}>Check back later for Level {level} sessions</Text>
+            </View>
+          </View>
+        ) : (
+          <FlatList
+            data={venues}
+            keyExtractor={item => item.id}
+            renderItem={renderVenueItem}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listContainer}
+          />
+        )}
+
+        <FloatingActionButton 
+          onPress={() => navigation.navigate('QrScanner')}
+          iconName="qr-code-scanner"
+        />
+      </View>
+
+      {/* Modal with dark theme */}
+      <Modal
+        visible={isModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setIsModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            {selectedVenue && (
+              <>
+                <View style={styles.modalHeader}>
+                  <View style={styles.modalHeaderContent}>
+                    <View style={[styles.modalIconContainer, { backgroundColor: getVenueAccentColor(selectedVenue.id) + '20' }]}>
+                      <Icon name="place" size={24} color={getVenueAccentColor(selectedVenue.id)} />
+                    </View>
+                    <View style={styles.modalTitleContainer}>
+                      <Text style={styles.modalTitle}>{selectedVenue.venue_name}</Text>
+                      <Text style={styles.modalSubtitle}>Session Details</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.modalCloseButton}
+                    onPress={() => {
+                      setIsModalVisible(false);
+                      setCancelText('');
+                    }}
+                  >
+                    <Icon name="close" size={24} color="#9CA3AF" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.modalContent}>
+                  <View style={styles.modalInfoGrid}>
+                    <View style={styles.modalInfoItem}>
+                      <Icon name="schedule" size={20} color="#6B7280" />
+                      <Text style={styles.modalInfoLabel}>Timing</Text>
+                      <Text style={styles.modalInfoValue}>{selectedVenue.session_timing}</Text>
+                    </View>
+                    
+                    <View style={styles.modalInfoItem}>
+                      <Icon name="table-restaurant" size={20} color="#6B7280" />
+                      <Text style={styles.modalInfoLabel}>Table</Text>
+                      <Text style={styles.modalInfoValue}>{selectedVenue.table_details}</Text>
+                    </View>
+                    
+                    <View style={styles.modalInfoItem}>
+                      <Icon name="group" size={20} color="#6B7280" />
+                      <Text style={styles.modalInfoLabel}>Capacity</Text>
+                      <Text style={styles.modalInfoValue}>{selectedVenue.capacity}</Text>
+                    </View>
+                    
+                    <View style={styles.modalInfoItem}>
+                      <Icon name="event-available" size={20} color="#6B7280" />
+                      <Text style={styles.modalInfoLabel}>Available</Text>
+                      <Text style={[styles.modalInfoValue, { color: getAvailabilityColor(selectedVenue.remaining, selectedVenue.capacity) }]}>
+                        {selectedVenue.remaining}
+                      </Text>
+                    </View>
+                  </View>
+                  
+                  {isBooked ? (
+                    <View style={styles.modalBookedSection}>
+                      <View style={styles.modalBookedStatus}>
+                        <Icon name="check-circle" size={20} color="#10B981" />
+                        <Text style={styles.modalBookedStatusText}>You have booked this session</Text>
+                      </View>
+                      
+                      <TextInput
+                        style={styles.modalCancelInput}
+                        placeholder="Type 'cancel' to confirm cancellation"
+                        placeholderTextColor="#6B7280"
+                        value={cancelText}
+                        onChangeText={setCancelText}
+                      />
+                      
+                      <TouchableOpacity
+                        style={[
+                          styles.modalActionButton,
+                          styles.modalCancelButton,
+                          cancelText.toLowerCase() !== 'cancel' && styles.modalActionButtonDisabled
+                        ]}
+                        onPress={() => {
+                          if (cancelText.toLowerCase() === 'cancel') {
+                            Alert.alert(
+                              'Confirm Cancellation',
+                              'Are you sure you want to cancel this booking?',
+                              [
+                                { text: 'No', style: 'cancel' },
+                                { text: 'Yes', onPress: handleCancelBooking }
+                              ]
+                            );
+                          }
+                        }}
+                        disabled={loading || cancelText.toLowerCase() !== 'cancel'}
+                      >
+                        <Icon name="cancel" size={18} color="#fff" />
+                        <Text style={styles.modalActionButtonText}>Cancel Booking</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={[
+                        styles.modalActionButton,
+                        styles.modalBookButton,
+                        selectedVenue.remaining <= 0 && styles.modalActionButtonDisabled
+                      ]}
+                      onPress={handleBookVenue}
+                      disabled={loading || selectedVenue.remaining <= 0}
+                    >
+                      <Icon name={selectedVenue.remaining <= 0 ? "block" : "event-available"} size={18} color="#fff" />
+                      <Text style={styles.modalActionButtonText}>
+                        {selectedVenue.remaining <= 0 ? 'Fully Booked' : 'Book Session'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0a0f1bff',
+  },
+  content: {
+    flex: 1,
+    padding: 20,
+    paddingTop: 20,
+  },
+  header: {
+    marginBottom: 32,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#94A3B8',
+    fontWeight: '400',
+  },
+  levelSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#1E293B',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 24,
+  },
+  levelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  levelButtonActive: {
+    backgroundColor: '#4F46E5',
+  },
+  levelButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  levelButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  venueCard: {
+    borderRadius: 16,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    overflow: 'hidden',
+  },
+  venueCardGradient: {
+    flex: 1,
+    position: 'relative',
+  },
+  patternOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: 'hidden',
+  },
+  diagonalLine: {
+    position: 'absolute',
+    width: 4,
+    height: '200%',
+    transform: [{ rotate: '45deg' }],
+  },
+  horizontalLine: {
+    position: 'absolute',
+    width: '100%',
+    height: 4,
+  },
+  verticalLine: {
+    position: 'absolute',
+    width: 4,
+    height: '100%',
+  },
+  dot: {
+    position: 'absolute',
+    width: 2,
+    height: 2,
+    borderRadius: 1,
+  },
+  cardContent: {
+    padding: 20,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  venueNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  venueIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  venueName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#F8FAFC',
+    flex: 1,
+  },
+  bookedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#064E3B',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#10B981',
+  },
+  bookedBadgeText: {
+    color: '#10B981',
+    fontSize: 11,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  cardBody: {
+    marginBottom: 16,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  infoItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  infoLabel: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 4,
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    fontWeight: '500',
+  },
+  infoValue: {
+    fontSize: 15,
+    color: '#F8FAFC',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  availabilitySection: {
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderRadius: 12,
+    padding: 16,
+  },
+  availabilityHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  availabilityLabel: {
+    fontSize: 13,
+    color: '#CBD5E1',
+    fontWeight: '500',
+  },
+  availabilityNumber: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  progressBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  progressBar: {
+    flex: 1,
+    height: 6,
+    backgroundColor: 'rgba(51, 65, 85, 0.8)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  progressText: {
+    fontSize: 12,
+    color: '#E2E8F0',
+    fontWeight: '600',
+    marginLeft: 12,
+    minWidth: 35,
+    textAlign: 'right',
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  statusIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 8,
+  },
+  statusText: {
+    fontSize: 13,
+    color: '#CBD5E1',
+    fontWeight: '500',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingCard: {
+    backgroundColor: '#1E293B',
+    borderRadius: 16,
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    width: '100%',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#94A3B8',
+    fontWeight: '500',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorCard: {
+    backgroundColor: '#1E293B',
+    borderRadius: 16,
+    padding: 40,
+    alignItems: 'center',
+    width: '100%',
+  },
+  errorText: {
+    color: '#94A3B8',
+    textAlign: 'center',
+    fontSize: 16,
+    marginVertical: 16,
+    lineHeight: 24,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#334155',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  retryButtonText: {
+    color: '#4F46E5',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyCard: {
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#F8FAFC',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 16,
+    color: '#64748B',
+    textAlign: 'center',
+  },
+  listContainer: {
+    paddingBottom: 100,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: '#1E293B',
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 400,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+  },
+  modalHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  modalIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  modalTitleContainer: {
+    flex: 1,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    marginBottom: 2,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#94A3B8',
+  },
+  modalCloseButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#334155',
+  },
+  modalContent: {
+    padding: 20,
+  },
+  modalInfoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 24,
+  },
+  modalInfoItem: {
+    width: '50%',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalInfoLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 8,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    fontWeight: '500',
+  },
+  modalInfoValue: {
+    fontSize: 16,
+    color: '#F8FAFC',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  modalBookedSection: {
+    marginTop: 4,
+  },
+  modalBookedStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#064E3B',
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#10B981',
+  },
+  modalBookedStatusText: {
+    fontSize: 15,
+    color: '#10B981',
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  modalCancelInput: {
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    fontSize: 16,
+    color: '#F8FAFC',
+    backgroundColor: '#0a0f1bff',
+  },
+  modalActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+  },
+  modalBookButton: {
+    backgroundColor: '#4F46E5',
+  },
+  modalCancelButton: {
+    backgroundColor: '#DC2626',
+  },
+  modalActionButtonDisabled: {
+    backgroundColor: '#374151',
+    opacity: 0.6,
+  },
+  modalActionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  venueCardBackgroundImage: {
+  borderRadius: 16,
+},
+venueCardOverlay: {
+  flex: 1,
+  borderRadius: 16,
+},
+});
+
+
+//////
+
+
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import api from '../services/api';
+import auth from '../services/auth'; 
+import LinearGradient from 'react-native-linear-gradient';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import HamburgerHeader from '../components/HamburgerHeader';
+
+const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
+  const getRankForMember = () => {
+    for (const [rank, memberId] of Object.entries(currentRankings)) {
+      if (memberId === member.id) {
+        return parseInt(rank);
+      }
+    }
+    return null;
+  };
+
+  const currentRank = getRankForMember();
+  const isSelected = currentRank !== null;
+
+  const getRankColor = (rank) => {
+    switch(rank) {
+      case 1: return ['#FFD700', '#FFA000']; // Gold gradient
+      case 2: return ['#E0E0E0', '#BDBDBD']; // Silver gradient
+      case 3: return ['#CD7F32', '#A0522D']; // Bronze gradient
+      default: return ['#4F46E5', '#7C3AED'];
+    }
+  };
+
+  const getRankLabel = (rank) => {
+    switch(rank) {
+      case 1: return '🥇 1st Place';
+      case 2: return '🥈 2nd Place'; 
+      case 3: return '🥉 3rd Place';
+      default: return `Rank ${rank}`;
+    }
+  };
+
+  return (
+    <View style={styles.memberCardContainer}>
+      <View style={[styles.memberCard, isSelected && styles.selectedCard]}>
+        {/* Member Info Section */}
+        <View style={styles.memberInfoContainer}>
+          <View style={styles.profileImageContainer}>
+            {member.profileImage ? (
+              <Image
+                source={{ uri: member.profileImage }}
+                style={styles.profileImage}
+                onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
+              />
+            ) : (
+              <LinearGradient
+                colors={['#4F46E5', '#7C3AED']}
+                style={styles.profileImageGradient}
+              >
+                <Icon name="person" size={20} color="#fff" />
+              </LinearGradient>
+            )}
+          </View>
+          <View style={styles.memberInfo}>
+            <Text style={styles.memberName}>{member.name}</Text>
+            <Text style={styles.memberEmail}>{member.email}</Text>
+            {member.department && (
+              <View style={styles.departmentContainer}>
+                <Icon name="domain" size={12} color="#64748B" />
+                <Text style={styles.memberDepartment}>{member.department}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+        
+        {/* Selection Status */}
+        {isSelected ? (
+          <View style={styles.selectedRankContainer}>
+            <LinearGradient
+              colors={getRankColor(currentRank)}
+              style={styles.rankBadge}
+            >
+              <Text style={styles.rankBadgeText}>{getRankLabel(currentRank)}</Text>
+            </LinearGradient>
+            <TouchableOpacity
+              style={styles.removeButtonContainer}
+              onPress={() => onSelect(currentRank, null)}
+            >
+              <LinearGradient
+                colors={['#EF4444', '#DC2626']}
+                style={styles.removeButton}
+              >
+                <Icon name="close" size={16} color="#fff" />
+                <Text style={styles.removeButtonText}>Remove</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.rankingButtons}>
+            {[1, 2, 3].map(rank => {
+              const isRankTaken = Object.values(currentRankings).includes(member.id) || currentRankings[rank];
+              return (
+                <TouchableOpacity
+                  key={rank}
+                  style={styles.rankButtonContainer}
+                  onPress={() => !isRankTaken && onSelect(rank, member.id)}
+                  disabled={!!isRankTaken}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={isRankTaken 
+                      ? ['#6B7280', '#4B5563'] 
+                      : getRankColor(rank)}
+                    style={[styles.rankButton, isRankTaken && styles.disabledRankButton]}
+                  >
+                    <Text style={[styles.rankButtonEmoji, isRankTaken && styles.disabledText]}>
+                      {rank === 1 && '🥇'}
+                      {rank === 2 && '🥈'}
+                      {rank === 3 && '🥉'}
+                    </Text>
+                    <Text style={[styles.rankButtonLabel, isRankTaken && styles.disabledText]}>
+                      {rank === 1 ? '1st' : rank === 2 ? '2nd' : '3rd'}
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Selection Glow Effect */}
+        {isSelected && (
+          <View style={styles.selectionGlow} />
+        )}
+      </View>
+    </View>
+  );
+};
+
+const seededShuffle = (array, seed) => {
+  const shuffled = [...array];
+  let currentSeed = seed;
+  const random = () => {
+    currentSeed = (currentSeed * 9301 + 49297) % 233280;
+    return currentSeed / 233280;
+  };
+  
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
+export default function SurveyScreen({ navigation, route }) {
+  const { sessionId } = route.params;
+  const [allQuestions, setAllQuestions] = useState([]);
+  const [shuffledQuestions, setShuffledQuestions] = useState([]);
+  const [questions, setQuestions] = useState([]);
+  
+  const [confirmedQuestions, setConfirmedQuestions] = useState([]);
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [selections, setSelections] = useState({});
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [timeRemaining, setTimeRemaining] = useState(30);
+  const [isTimedOut, setIsTimedOut] = useState(false);
+  const [penalties, setPenalties] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [userSeed, setUserSeed] = useState(null);
+
+ useEffect(() => {
+    const initializeUserSeed = async () => {
+      try {
+        const authData = await auth.getAuthData();
+        const seed = `${authData.userId}-${sessionId}`;
+        setUserSeed(seed);
+      } catch (error) {
+        setUserSeed(Math.random().toString());
+      }
+    };
+    initializeUserSeed();
+  }, [sessionId]);
+
+useEffect(() => {
+ const fetchQuestions = async () => {
+  if (!userSeed) return;
+
+  try {
+    const authData = await auth.getAuthData();
+    const studentLevel = parseInt(authData.level) || 1;
+    console.log('Student level from auth:', studentLevel);
+    
+    const questionsResponse = await api.get('/student/questions', {
+      params: { 
+        level: studentLevel,
+        session_id: sessionId,
+      }
+    });
+    
+    console.log('Questions API response status:', questionsResponse.status);
+    console.log('Questions API response data:', questionsResponse.data);
+    
+    let questionsData = questionsResponse.data;
+    
+    if (questionsData && typeof questionsData === 'object' && !Array.isArray(questionsData)) {
+      if (questionsData.data && Array.isArray(questionsData.data)) {
+        questionsData = questionsData.data;
+      } else if (Array.isArray(questionsData)) {
+        // Already an array
+      } else {
+        const arrayKeys = Object.keys(questionsData).filter(key => Array.isArray(questionsData[key]));
+        if (arrayKeys.length > 0) {
+          questionsData = questionsData[arrayKeys[0]];
+        } else {
+          questionsData = [];
+        }
+      }
+    }
+    
+    if (!Array.isArray(questionsData)) {
+      console.log('Questions data is not array, using empty array');
+      questionsData = [];
+    }
+    
+    console.log('Processed questions data:', questionsData);
+    
+    if (questionsData.length === 0) {
+      console.log('No questions returned from database, using fallback');
+      questionsData = [
+        { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
+        { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
+        { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
+      ];
+    } else {
+      console.log(`Found ${questionsData.length} questions from database`);
+    }
+    
+    setAllQuestions(questionsData);
+    
+    let numericSeed = 0;
+    for (let i = 0; i < userSeed.length; i++) {
+      numericSeed = (numericSeed * 31 + userSeed.charCodeAt(i)) % 1000000;
+    }
+    
+    const shuffled = seededShuffle(questionsData, numericSeed);
+    setShuffledQuestions(shuffled);
+    setQuestions(shuffled);
+    
+    const initialSelections = {};
+    shuffled.forEach((_, index) => {
+      initialSelections[index] = {};
+    });
+    setSelections(initialSelections);
+    
+  } catch (error) {
+    console.error('Questions fetch error:', error.response?.data || error.message);
+    const defaultQuestions = [
+      { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
+      { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
+      { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
+    ];
+    
+    setAllQuestions(defaultQuestions);
+    
+    if (userSeed) {
+      let numericSeed = 0;
+      for (let i = 0; i < userSeed.length; i++) {
+        numericSeed = (numericSeed * 31 + userSeed.charCodeAt(i)) % 1000000;
+      }
+      const shuffled = seededShuffle(defaultQuestions, numericSeed);
+      setShuffledQuestions(shuffled);
+      setQuestions(shuffled);
+      
+      const initialSelections = {};
+      shuffled.forEach((_, index) => {
+        initialSelections[index] = {};
+      });
+      setSelections(initialSelections);
+    }
+  }
+};
+
+  fetchQuestions();
+}, [sessionId, userSeed]);
+
+  // Timer management
+  useEffect(() => {
+    let timerInterval;
+    let timeoutCheckInterval;
+    
+    const startTimer = async () => {
+        try {
+            setIsTimedOut(false);
+            setTimeRemaining(30);
+            
+            await api.student.startQuestionTimer(sessionId, currentQuestion + 1);
+            
+            timerInterval = setInterval(() => {
+                setTimeRemaining(prev => {
+                    if (prev <= 1) {
+                        clearInterval(timerInterval);
+                        setIsTimedOut(true);
+                        handleTimeout();
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+            
+            timeoutCheckInterval = setInterval(async () => {
+                try {
+                    const response = await api.student.checkQuestionTimeout(
+                        sessionId, 
+                        currentQuestion + 1
+                    );
+                    
+                    if (response.data?.is_timed_out && !penalties[currentQuestion]) {
+                        handleTimeout();
+                    }
+                } catch (err) {
+                    console.log('Timeout check error:', err);
+                }
+            }, 5000);
+            
+        } catch (err) {
+            console.log('Timer setup error:', err);
+            timerInterval = setInterval(() => {
+                setTimeRemaining(prev => {
+                    if (prev <= 1) {
+                        clearInterval(timerInterval);
+                        setIsTimedOut(true);
+                        handleTimeout();
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+        }
+    };
+    
+    const handleTimeout = async () => {
+        if (!penalties[currentQuestion]) {
+            try {
+                const authData = await auth.getAuthData();
+                await api.student.applyQuestionPenalty(
+                    sessionId,
+                    currentQuestion + 1,
+                    authData.userId
+                );
+                setPenalties(prev => ({
+                    ...prev,
+                    [currentQuestion]: true
+                }));
+                Alert.alert(
+                    "Time's Up!", 
+                    "You've been penalized 0.5 points for not completing this question in time"
+                );
+            } catch (err) {
+                console.log('Penalty application error:', err);
+            }
+        }
+    };
+    
+    startTimer();
+    
+    return () => {
+        clearInterval(timerInterval);
+        clearInterval(timeoutCheckInterval);
+    };
+  }, [currentQuestion]);
+
+  useEffect(() => {
+    const fetchParticipants = async () => {
+      try {
+        setLoading(true);
+        const response = await api.student.getSessionParticipants(sessionId);
+        
+        let participants = [];
+        if (Array.isArray(response.data)) {
+          participants = response.data;
+        } else if (response.data?.data) {
+          participants = response.data.data;
+        }
+        
+        const authData = await auth.getAuthData();
+        const filteredParticipants = participants.filter(
+          participant => participant.id !== authData.userId
+        );
+        
+        setMembers(filteredParticipants);
+        setError(null);
+        
+        setSelections(prev => {
+          const newSelections = {...prev};
+          shuffledQuestions.forEach((_, index) => {
+            if (!newSelections[index]) {
+              newSelections[index] = {};
+            }
+          });
+          return newSelections;
+        });
+      } catch (err) {
+        setError('Failed to load participants');
+        setMembers([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (shuffledQuestions.length > 0) {
+      fetchParticipants();
+    }
+  }, [sessionId, shuffledQuestions]);
+
+  const handleSelect = (rank, memberId) => {
+    setSelections(prev => ({
+      ...prev,
+      [currentQuestion]: {
+        ...prev[currentQuestion],
+        [rank]: memberId
+      }
+    }));
+  };
+
+const confirmCurrentQuestion = async () => {
+    const currentSelections = selections[currentQuestion] || {};
+    const hasAtLeastOneRank = Object.keys(currentSelections).length > 0;
+    
+    if (!hasAtLeastOneRank && !penalties[currentQuestion]) {
+        Alert.alert(
+            "Incomplete Ranking",
+            "You haven't selected any rankings for this question. " +
+            "You'll receive a penalty if you proceed without selections.",
+            [
+                {
+                    text: "Cancel",
+                    style: "cancel"
+                },
+                {
+                    text: "Proceed Anyway",
+                    onPress: async () => {
+                        try {
+                            const authData = await auth.getAuthData();
+                            await api.student.applyQuestionPenalty(
+                                sessionId,
+                                currentQuestion + 1,
+                                authData.userId
+                            );
+                            setPenalties(prev => ({
+                                ...prev,
+                                [currentQuestion]: true
+                            }));
+                            proceedToNextQuestion(true);
+                        } catch (err) {
+                            console.log('Penalty application error:', err);
+                        }
+                    }
+                }
+            ]
+        );
+        return;
+    }
+
+    proceedToNextQuestion(true);
+};
+
+const proceedToNextQuestion = async (isPartial = false) => {
+    setIsSubmitting(true);
+    
+    try {
+        const currentSelections = selections[currentQuestion] || {};
+        if (Object.keys(currentSelections).length > 0) {
+            const shuffledQuestion = shuffledQuestions[currentQuestion];
+            const questionNumber = currentQuestion + 1;
+            
+            const isFinal = !isPartial && (currentQuestion === shuffledQuestions.length - 1);
+            
+            const responseData = {
+                sessionId,
+                responses: {
+                    [questionNumber]: currentSelections
+                },
+                isPartial: isPartial,
+                isFinal: isFinal
+            };
+            
+            console.log('Submitting survey data - isFinal:', isFinal, 'isPartial:', isPartial);
+            await api.student.submitSurvey(responseData, isFinal);
+        }
+
+        setConfirmedQuestions(prev => [...prev, currentQuestion]);
+        
+        if (currentQuestion === shuffledQuestions.length - 1) {
+            navigation.replace('Waiting', { sessionId });
+        } else {
+            setCurrentQuestion(prev => prev + 1);
+        }
+    } catch (error) {
+        console.error('Error submitting survey:', error);
+        Alert.alert('Error', 'Failed to submit survey. Please try again.');
+    } finally {
+        setIsSubmitting(false);
+    }
+};
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <View style={styles.loadingCard}>
+            <View style={styles.loadingIconContainer}>
+              <ActivityIndicator size="large" color="#4F46E5" />
+            </View>
+            <Text style={styles.loadingTitle}>Loading Survey</Text>
+            <Text style={styles.loadingSubtitle}>Preparing your evaluation form...</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.errorContainer}>
+          <View style={styles.errorCard}>
+            <Icon name="error-outline" size={48} color="#EF4444" />
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  const currentRankings = selections[currentQuestion] || {};
+
+  return (
+    <View style={styles.container}>
+  
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.contentContainer}>
+          {/* Header Section */}
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Peer Evaluation</Text>
+            <Text style={styles.headerSubtitle}>Rate your teammates' performance</Text>
+          </View>
+
+          {/* Compact Timer & Question Section */}
+          <View style={styles.topSection}>
+            {/* Timer Row */}
+            <View style={styles.timerRow}>
+              <View style={styles.timerContainer}>
+                <Icon name="timer" size={20} color="#4F46E5" />
+                <Text style={styles.timerText}>{timeRemaining}s</Text>
+              </View>
+              {isTimedOut && (
+                <View style={styles.timeoutBadge}>
+                  <Icon name="warning" size={16} color="#EF4444" />
+                  <Text style={styles.timeoutText}>Time's Up!</Text>
+                </View>
+              )}
+              {penalties[currentQuestion] && (
+                <View style={styles.penaltyBadge}>
+                  <Icon name="report" size={16} color="#F59E0B" />
+                  <Text style={styles.penaltyText}>Penalty</Text>
+                </View>
+              )}
+            </View>
+            
+            {/* Question Row */}
+            <View style={styles.questionRow}>
+              <Text style={styles.questionNumber}>Q{currentQuestion + 1}</Text>
+              <Text style={styles.question}>
+                {shuffledQuestions[currentQuestion]?.text || 'Question loading...'}
+              </Text>
+            </View>
+
+            {/* Current Rankings Row */}
+            <View style={styles.rankingsRow}>
+              <Text style={styles.rankingsLabel}>Current Rankings:</Text>
+              <View style={styles.rankingsList}>
+                {[1, 2, 3].map(rank => {
+                  const selectedMember = members.find(m => m.id === currentRankings[rank]);
+                  return (
+                    <View key={rank} style={styles.rankingItem}>
+                      <Text style={styles.rankEmoji}>
+                        {rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉'}
+                      </Text>
+                      <Text style={styles.rankingName}>
+                        {selectedMember ? selectedMember.name : 'Not selected'}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+
+          {/* Main Participants List */}
+          <View style={styles.participantsSection}>
+            <Text style={styles.participantsTitle}>
+              Participants ({members.length})
+            </Text>
+            <View style={styles.participantsList}>
+              {members.map((member) => (
+                <MemberCard 
+                  key={member.id}
+                  member={member}
+                  onSelect={handleSelect}
+                  selections={selections}
+                  currentRankings={currentRankings}
+                />
+              ))}
+            </View>
+          </View>
+
+          {/* Bottom Navigation */}
+          <View style={styles.navigationContainer}>
+            <View style={styles.navigation}>
+              {currentQuestion > 0 && (
+                <TouchableOpacity
+                  style={styles.navButtonContainer}
+                  onPress={() => setCurrentQuestion(currentQuestion - 1)}
+                  disabled={isSubmitting}
+                >
+                  <View style={styles.navButton}>
+                    <Icon name="arrow-back" size={20} color="#F8FAFC" />
+                    <Text style={styles.navButtonText}>Previous</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+              
+              <View style={styles.centerAction}>
+                {confirmedQuestions.includes(currentQuestion) ? (
+                  <View style={styles.confirmedContainer}>
+                    <LinearGradient
+                      colors={['#10B981', '#059669']}
+                      style={styles.confirmedBadge}
+                    >
+                      <Icon name="check-circle" size={20} color="#fff" />
+                      <Text style={styles.confirmedText}>Confirmed</Text>
+                    </LinearGradient>
+                    {currentQuestion < shuffledQuestions.length - 1 && (
+                      <TouchableOpacity
+                        style={styles.nextButtonContainer}
+                        onPress={() => setCurrentQuestion(currentQuestion + 1)}
+                        disabled={isSubmitting}
+                      >
+                        <LinearGradient
+                          colors={['#3B82F6', '#2563EB']}
+                          style={styles.nextButton}
+                        >
+                          <Text style={styles.nextButtonText}>Next Question</Text>
+                          <Icon name="arrow-forward" size={20} color="#fff" />
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.confirmButtonContainer}
+                    onPress={confirmCurrentQuestion}
+                    disabled={Object.keys(currentRankings).length < 1 || isSubmitting}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={(Object.keys(currentRankings).length < 1 || isSubmitting)
+                        ? ['#6B7280', '#4B5563']
+                        : currentQuestion < shuffledQuestions.length - 1 
+                          ? ['#10B981', '#059669'] 
+                          : ['#F59E0B', '#D97706']}
+                      style={styles.confirmButton}
+                    >
+                      {isSubmitting ? (
+                        <ActivityIndicator color="white" size="small" />
+                      ) : (
+                        <>
+                          <Text style={styles.confirmButtonText}>
+                            {currentQuestion < shuffledQuestions.length - 1 ? 'Confirm & Next' : 'Submit Survey'}
+                          </Text>
+                          <Icon 
+                            name={currentQuestion < shuffledQuestions.length - 1 ? "check" : "send"} 
+                            size={20} 
+                            color="#fff" 
+                          />
+                        </>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0a0f1bff',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  contentContainer: {
+    flex: 1,
+    paddingTop: 25,
+    paddingHorizontal: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  loadingCard: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 20,
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  loadingIconContainer: {
+    marginBottom: 20,
+  },
+  loadingTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    marginTop: 20,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  loadingSubtitle: {
+    fontSize: 16,
+    color: '#94A3B8',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  errorCard: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 20,
+    padding: 40,
+    alignItems: 'center',
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  errorText: {
+    color: '#F8FAFC',
+    textAlign: 'center',
+    fontSize: 16,
+    marginTop: 16,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  headerTitle: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#F8FAFC',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: '#94A3B8',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  topSection: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  timerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    justifyContent: 'space-between',
+  },
+  timerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#334155',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  timerText: {
+    color: '#F8FAFC',
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+  timeoutBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  timeoutText: {
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  penaltyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  penaltyText: {
+    color: '#F59E0B',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  questionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  questionNumber: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#F8FAFC',
+    backgroundColor: '#334155',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 12,
+    minWidth: 40,
+    textAlign: 'center',
+  },
+  question: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#F8FAFC',
+    flex: 1,
+    lineHeight: 22,
+  },
+  rankingsRow: {
+    marginTop: 8,
+  },
+  rankingsLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#F8FAFC',
+    marginBottom: 8,
+  },
+  rankingsList: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  rankingItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#334155',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginHorizontal: 2,
+  },
+  rankEmoji: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  rankingName: {
+    fontSize: 12,
+    color: '#94A3B8',
+    fontWeight: '500',
+    flex: 1,
+    textAlign: 'center',
+  },
+  participantsSection: {
+    flex: 1,
+    marginBottom: 16,
+  },
+  participantsTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  participantsList: {
+    paddingBottom: 10,
+  },
+  memberCardContainer: {
+    marginBottom: 16,
+  },
+  memberCard: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#334155',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  selectedCard: {
+    borderColor: '#4F46E5',
+    shadowColor: '#4F46E5',
+    shadowOpacity: 0.5,
+    elevation: 12,
+  },
+  selectionGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: 'rgba(79,70,229,0.6)',
+  },
+  memberInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  profileImageContainer: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginRight: 12,
+  },
+  profileImageGradient: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  memberInfo: {
+    flex: 1,
+  },
+  memberName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#F8FAFC',
+    marginBottom: 2,
+  },
+  memberEmail: {
+    fontSize: 14,
+    color: '#94A3B8',
+    marginBottom: 4,
+  },
+  departmentContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  memberDepartment: {
+    fontSize: 12,
+    color: '#64748B',
+    fontStyle: 'italic',
+    marginLeft: 4,
+  },
+  selectedRankContainer: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  rankBadge: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+  rankBadgeText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  removeButtonContainer: {
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  removeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  removeButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  rankingButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    gap: 12,
+  },
+  rankButtonContainer: {
+    borderRadius: 25,
+    overflow: 'hidden',
+    flex: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  rankButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  disabledRankButton: {
+    opacity: 0.5,
+  },
+  rankButtonEmoji: {
+    fontSize: 20,
+    marginBottom: 4,
+  },
+  rankButtonLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  disabledText: {
+    color: 'rgba(255,255,255,0.5)',
+  },
+  navigationContainer: {
+    backgroundColor: '#090d13ff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  navigation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  navButtonContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  navButton: {
+    backgroundColor: '#334155',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  navButtonText: {
+    color: '#F8FAFC',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  centerAction: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 16,
+  },
+  confirmedContainer: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  confirmedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  confirmedText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+    marginLeft: 6,
+  },
+  nextButtonContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  nextButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  nextButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    marginRight: 8,
+  },
+  confirmButtonContainer: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  confirmButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+  },
+  confirmButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '800',
+    marginRight: 8,
+  },
+});
+
+
+
+
+
+//////
+
+
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, BackHandler, Alert, TouchableOpacity } from 'react-native';
+import api from '../services/api';
+import { globalStyles, colors, layout } from '../assets/globalStyles';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import LinearGradient from 'react-native-linear-gradient';
+import HamburgerHeader from '../components/HamburgerHeader';
+export default function WaitingScreen({ navigation, route }) {
+    const { sessionId } = route.params;
+    const [status, setStatus] = useState({
+        allCompleted: false,
+        completed: 0,
+        total: 0
+    });
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const pollingRef = useRef(null);
+    const [lastUpdate, setLastUpdate] = useState(Date.now());
+
+const checkCompletionStatus = async () => {
+    try {
+        const response = await api.student.checkSurveyCompletion(sessionId);
+        
+        if (response.data) {
+            const completed = Number(response.data.completed) || 0;
+            const total = Number(response.data.total) || 0;
+            
+            // Minimum 2 participants required (excluding self)
+            const hasEnoughParticipants = total >= 2;
+            
+            setStatus({
+                allCompleted: hasEnoughParticipants && (completed >= total),
+                completed,
+                total
+            });
+            setLastUpdate(Date.now());
+
+            if (hasEnoughParticipants && completed >= total) {
+                clearInterval(pollingRef.current);
+                navigation.replace('Results', { sessionId });
+            }
+        }
+    } catch (err) {
+        console.error('Completion check error:', err);
+        setError('Failed to check completion status');
+    } finally {
+        setLoading(false);
+    }
+};
+
+    useEffect(() => {
+        // Initial check
+        checkCompletionStatus();
+
+        // Start polling every 3 seconds
+        pollingRef.current = setInterval(checkCompletionStatus, 3000);
+
+        // Handle back button
+        const backHandler = BackHandler.addEventListener(
+            'hardwareBackPress',
+            () => {
+                Alert.alert(
+                    "Waiting for Results",
+                    "Are you sure you want to leave? You won't see the results if you exit now.",
+                    [
+                        { text: "Cancel", onPress: () => null },
+                        { text: "Exit", onPress: () => navigation.goBack() }
+                    ]
+                );
+                return true;
+            }
+        );
+
+        return () => {
+            clearInterval(pollingRef.current);
+            backHandler.remove();
+        };
+    }, [sessionId]);
+
+    if (loading) {
+        return (
+            <LinearGradient
+                colors={['#1a1a1a', '#2d2d2d', '#1a1a1a']}
+                style={styles.container}
+            >
+                <View style={styles.loadingContainer}>
+                    <View style={styles.loadingCard}>
+                        <LinearGradient
+                            colors={['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']}
+                            style={styles.loadingCardGradient}
+                        >
+                            <View style={styles.loadingIconContainer}>
+                                <ActivityIndicator size="large" color="#64ffda" />
+                            </View>
+                            <Text style={styles.loadingTitle}>Checking Status</Text>
+                            <Text style={styles.loadingSubtitle}>Checking survey completion status...</Text>
+                        </LinearGradient>
+                    </View>
+                </View>
+            </LinearGradient>
+        );
+    }
+
+    if (error) {
+        return (
+            <LinearGradient
+                colors={['#1a1a1a', '#2d2d2d', '#1a1a1a']}
+                style={styles.container}
+            >
+                <View style={styles.errorContainer}>
+                    <LinearGradient
+                        colors={['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']}
+                        style={styles.errorCard}
+                    >
+                        <View style={styles.errorIconContainer}>
+                            <Icon name="error-outline" size={64} color="#ff5252" />
+                        </View>
+                        <Text style={styles.errorTitle}>Connection Issue</Text>
+                        <Text style={styles.errorSubtitle}>{error}</Text>
+                        <Text style={styles.retryText}>Will retry automatically...</Text>
+                        <Text style={styles.timestamp}>
+                            Last update: {new Date(lastUpdate).toLocaleTimeString()}
+                        </Text>
+                    </LinearGradient>
+                </View>
+            </LinearGradient>
+        );
+    }
+
+    return (
+        
+        <LinearGradient
+            colors={['#1a1a1a', '#2d2d2d', '#1a1a1a']}
+            style={styles.container}
+        > 
+        <HamburgerHeader title="Waiting Lobby" />
+            <View style={styles.contentContainer}>
+                {/* Header Section */}
+                <View style={styles.header}>
+                    <View style={styles.headerIconContainer}>
+                        <LinearGradient
+                            colors={['rgba(100,255,218,0.2)', 'rgba(100,255,218,0.1)']}
+                            style={styles.headerIconGradient}
+                        >
+                            <Icon name="hourglass-empty" size={32} color="#64ffda" />
+                        </LinearGradient>
+                    </View>
+                    <Text style={styles.title}>Waiting for Others</Text>
+                    <Text style={styles.subtitle}>Please wait while others complete their surveys</Text>
+                </View>
+
+                {/* Progress Section */}
+                <View style={styles.progressCard}>
+                    <LinearGradient
+                        colors={['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']}
+                        start={{x: 0, y: 0}}
+                        end={{x: 1, y: 1}}
+                        style={styles.progressGradient}
+                    >
+                        <View style={styles.progressHeader}>
+                            <Icon name="people" size={24} color="#64ffda" />
+                            <Text style={styles.progressLabel}>Survey Progress</Text>
+                        </View>
+                        
+                        <View style={styles.progressStats}>
+                            <View style={styles.completedContainer}>
+                                <Text style={styles.completedNumber}>{status.completed}</Text>
+                                <Text style={styles.completedLabel}>Completed</Text>
+                            </View>
+                            <View style={styles.progressDivider}>
+                                <Text style={styles.dividerText}>of</Text>
+                            </View>
+                            <View style={styles.totalContainer}>
+                                <Text style={styles.totalNumber}>{status.total}</Text>
+                                <Text style={styles.totalLabel}>Total</Text>
+                            </View>
+                        </View>
+
+                        {status.total > 0 && (
+                            <View style={styles.progressBarContainer}>
+                                <View style={styles.progressBarBackground}>
+                                    <LinearGradient
+                                        colors={['#64ffda', '#00bcd4']}
+                                        style={[
+                                            styles.progressBarFill,
+                                            { width: `${(status.completed / status.total) * 100}%` }
+                                        ]}
+                                    />
+                                </View>
+                                <Text style={styles.progressPercentage}>
+                                    {Math.round((status.completed / status.total) * 100)}%
+                                </Text>
+                            </View>
+                        )}
+
+                        {status.total > status.completed && (
+                            <Text style={styles.remainingText}>
+                                {status.total - status.completed} participants still completing
+                            </Text>
+                        )}
+                    </LinearGradient>
+                </View>
+
+                {/* Loading Animation Section */}
+                <View style={styles.loadingSection}>
+                    <LinearGradient
+                        colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.04)']}
+                        style={styles.loadingAnimationContainer}
+                    >
+                        <ActivityIndicator size="large" color="#64ffda" style={styles.spinner} />
+                        <Text style={styles.waitingText}>Processing surveys...</Text>
+                    </LinearGradient>
+                </View>
+
+                {/* Status Section */}
+                <View style={styles.statusContainer}>
+                    <LinearGradient
+                        colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.03)']}
+                        style={styles.statusGradient}
+                    >
+                        <View style={styles.statusRow}>
+                            <Icon name="info-outline" size={20} color="#64ffda" />
+                            <Text style={styles.note}>
+                                Results will appear automatically when everyone finishes
+                            </Text>
+                        </View>
+                        <View style={styles.timestampContainer}>
+                            <Icon name="access-time" size={16} color="rgba(255,255,255,0.6)" />
+                            <Text style={styles.timestamp}>
+                                Last checked: {new Date(lastUpdate).toLocaleTimeString()}
+                            </Text>
+                        </View>
+                    </LinearGradient>
+                </View>
+            </View>
+        </LinearGradient>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 40,
+    },
+    loadingCard: {
+        borderRadius: 20,
+        overflow: 'hidden',
+        width: '100%',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
+    loadingCardGradient: {
+        paddingVertical: 40,
+        paddingHorizontal: 32,
+        alignItems: 'center',
+    },
+    loadingIconContainer: {
+        marginBottom: 20,
+    },
+    loadingTitle: {
+        fontSize: 22,
+        fontWeight: '700',
+        color: '#ffffff',
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    loadingSubtitle: {
+        fontSize: 16,
+        color: 'rgba(255,255,255,0.7)',
+        textAlign: 'center',
+        lineHeight: 22,
+    },
+    errorContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 40,
+    },
+    errorCard: {
+        borderRadius: 20,
+        padding: 40,
+        alignItems: 'center',
+        width: '100%',
+        borderWidth: 1,
+        borderColor: 'rgba(255,82,82,0.3)',
+    },
+    errorIconContainer: {
+        marginBottom: 20,
+    },
+    errorTitle: {
+        fontSize: 24,
+        fontWeight: '700',
+        color: '#ffffff',
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    errorSubtitle: {
+        fontSize: 16,
+        color: 'rgba(255,255,255,0.7)',
+        textAlign: 'center',
+        marginBottom: 16,
+        lineHeight: 22,
+    },
+    retryText: {
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.6)',
+        textAlign: 'center',
+        marginBottom: 12,
+        fontStyle: 'italic',
+    },
+    contentContainer: {
+        flex: 1,
+        padding: 20,
+        paddingTop: 50,
+    },
+    header: {
+        alignItems: 'center',
+        marginBottom: 32,
+    },
+    headerIconContainer: {
+        borderRadius: 30,
+        overflow: 'hidden',
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(100,255,218,0.3)',
+    },
+    headerIconGradient: {
+        padding: 16,
+    },
+    title: {
+        fontSize: 32,
+        fontWeight: '800',
+        color: '#ffffff',
+        textAlign: 'center',
+        marginBottom: 8,
+        textShadowColor: 'rgba(0,0,0,0.5)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
+    },
+    subtitle: {
+        fontSize: 16,
+        color: 'rgba(255,255,255,0.7)',
+        textAlign: 'center',
+        fontWeight: '500',
+    },
+    progressCard: {
+        borderRadius: 20,
+        overflow: 'hidden',
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
+    progressGradient: {
+        padding: 24,
+    },
+    progressHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    progressLabel: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#ffffff',
+        marginLeft: 12,
+    },
+    progressStats: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 20,
+    },
+    completedContainer: {
+        alignItems: 'center',
+        flex: 1,
+    },
+    completedNumber: {
+        fontSize: 32,
+        fontWeight: '800',
+        color: '#64ffda',
+    },
+    completedLabel: {
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.7)',
+        fontWeight: '500',
+    },
+    progressDivider: {
+        alignItems: 'center',
+        paddingHorizontal: 20,
+    },
+    dividerText: {
+        fontSize: 16,
+        color: 'rgba(255,255,255,0.5)',
+        fontWeight: '500',
+    },
+    totalContainer: {
+        alignItems: 'center',
+        flex: 1,
+    },
+    totalNumber: {
+        fontSize: 32,
+        fontWeight: '800',
+        color: '#ffffff',
+    },
+    totalLabel: {
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.7)',
+        fontWeight: '500',
+    },
+    progressBarContainer: {
+        marginBottom: 16,
+    },
+    progressBarBackground: {
+        height: 8,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        borderRadius: 4,
+        overflow: 'hidden',
+        marginBottom: 8,
+    },
+    progressBarFill: {
+        height: '100%',
+        borderRadius: 4,
+    },
+    progressPercentage: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#ffffff',
+        textAlign: 'center',
+    },
+    remainingText: {
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.6)',
+        textAlign: 'center',
+        fontStyle: 'italic',
+    },
+    loadingSection: {
+        borderRadius: 16,
+        overflow: 'hidden',
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.08)',
+    },
+    loadingAnimationContainer: {
+        padding: 32,
+        alignItems: 'center',
+    },
+    spinner: {
+        marginBottom: 16,
+    },
+    waitingText: {
+        fontSize: 16,
+        color: 'rgba(255,255,255,0.7)',
+        fontWeight: '500',
+    },
+    statusContainer: {
+        borderRadius: 12,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.06)',
+    },
+    statusGradient: {
+        padding: 16,
+    },
+    statusRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    note: {
+        flex: 1,
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.7)',
+        marginLeft: 12,
+        lineHeight: 20,
+    },
+    timestampContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    timestamp: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.6)',
+        marginLeft: 6,
+    },
+});
