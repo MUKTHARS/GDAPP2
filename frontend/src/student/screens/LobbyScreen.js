@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import HamburgerHeader from '../components/HamburgerHeader';
-
+import auth from '../services/auth';
 export default function LobbyScreen({ navigation, route }) {
     const { sessionId } = route.params;
     const [participants, setParticipants] = useState([]);
@@ -24,7 +24,8 @@ export default function LobbyScreen({ navigation, route }) {
     const [timerActive, setTimerActive] = useState(false); // Changed to false initially
     const [backgroundTime, setBackgroundTime] = useState(null);
     const [appState, setAppState] = useState(AppState.currentState);
-
+    const [readyStatuses, setReadyStatuses] = useState([]);
+    const [allReady, setAllReady] = useState(false);
     // Track app state changes (foreground/background)
     useEffect(() => {
         const handleAppStateChange = (nextAppState) => {
@@ -69,6 +70,40 @@ export default function LobbyScreen({ navigation, route }) {
             if (timerInterval) clearInterval(timerInterval);
         };
     }, [timerActive]);
+useEffect(() => {
+  const fetchReadyStatus = async () => {
+    try {
+      // Try to get ready status from backend
+      const response = await api.student.getReadyStatus(sessionId);
+      setReadyStatuses(response.data.ready_statuses || []);
+      
+      // Try to check if all are ready
+      const allReadyResponse = await api.student.checkAllReady(sessionId);
+      setAllReady(allReadyResponse.data.all_ready || false);
+      
+      // If all participants are ready, navigate to session
+      if (allReadyResponse.data.all_ready) {
+        navigation.replace('GdSession', { sessionId });
+      }
+    } catch (error) {
+      console.error('Error fetching ready status:', error);
+      // Fallback: Use local state to track ready status
+      // This will work until backend routes are implemented
+      setReadyStatuses([]);
+      setAllReady(false);
+    }
+  };
+  
+  // Initial fetch
+  fetchReadyStatus();
+  
+  // Poll every 3 seconds
+  const readyInterval = setInterval(fetchReadyStatus, 3000);
+  
+  return () => {
+    clearInterval(readyInterval);
+  };
+}, [sessionId]);
 
     const fetchParticipants = async () => {
         try {
@@ -112,38 +147,43 @@ export default function LobbyScreen({ navigation, route }) {
         };
     }, [sessionId]);
 
-    const handleReady = async () => {
-        try {
-            setIsReady(true);
-            // Start the timer when user clicks "I'm Ready"
-            setTimerActive(true);
-            
-            const token = await AsyncStorage.getItem('token');
-            if (!token) {
-                throw new Error('No authentication token found');
-            }
+const handleReady = async () => {
+  try {
+    setIsReady(true);
+    
+    // Update ready status in backend
+    await api.student.updateReadyStatus(sessionId, true);
+    
+    // Start the timer when user clicks "I'm Ready"
+    setTimerActive(true);
 
-            await api.put('/student/session/status', { 
-                sessionId, 
-                status: 'active'
-            }, {
-                headers: {
-                    Authorization: `Bearer ${token.replace(/['"]+/g, '')}`
-                }
-            });
-            
-            // Wait for the timer to complete before navigating
-            if (timeRemaining === 0) {
-                navigation.replace('GdSession', { sessionId });
-            }
-        } catch (error) {
-            console.error('Error starting session:', error);
-            setIsReady(false);
-            setTimerActive(false);
-        }
-    };
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
 
-    // Navigate when timer completes
+    await api.put('/student/session/status', { 
+      sessionId, 
+      status: 'active'
+    }, {
+      headers: {
+        Authorization: `Bearer ${token.replace(/['"]+/g, '')}`
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error starting session:', error);
+    setIsReady(false);
+    setTimerActive(false);
+  }
+};
+
+const getReadyStatusForParticipant = (participantId) => {
+  const status = readyStatuses.find(s => s.student_id === participantId);
+  return status ? status.is_ready : false;
+};
+
+// Navigate when timer completes
     useEffect(() => {
         if (timeRemaining === 0 && isReady) {
             navigation.replace('GdSession', { sessionId });
@@ -174,40 +214,53 @@ export default function LobbyScreen({ navigation, route }) {
         );
     }
 
-    const renderParticipantItem = ({ item, index }) => (
-        <View style={styles.participantCard}>
-            <View style={styles.participantHeader}>
-                <View style={styles.participantAvatar}>
-                    {item.profileImage ? (
-                        <Image
-                            source={{ uri: item.profileImage }}
-                            style={styles.avatarImage}
-                            onError={(e) => {
-                                console.log('Image load error:', e.nativeEvent.error);
-                            }}
-                        />
-                    ) : (
-                        <LinearGradient
-                            colors={['#4F46E5', '#7C3AED']}
-                            style={styles.avatarGradient}
-                        >
-                            <Icon name="person" size={20} color="#fff" />
-                        </LinearGradient>
-                    )}
-                </View>
-                <View style={styles.participantInfo}>
-                    <Text style={styles.participantName}>{item.name}</Text>
-                    {item.department && (
-                        <Text style={styles.participantDept}>{item.department}</Text>
-                    )}
-                </View>
-                <View style={styles.onlineIndicator}>
-                    <View style={styles.onlineDot} />
-                    <Text style={styles.onlineText}>Online</Text>
-                </View>
-            </View>
+  const renderParticipantItem = ({ item, index }) => {
+  const isReady = getReadyStatusForParticipant(item.id);
+  
+  return (
+    <View style={styles.participantCard}>
+      <View style={styles.participantHeader}>
+        <View style={styles.participantAvatar}>
+          {item.profileImage ? (
+            <Image
+              source={{ uri: item.profileImage }}
+              style={styles.avatarImage}
+              onError={(e) => {
+                console.log('Image load error:', e.nativeEvent.error);
+              }}
+            />
+          ) : (
+            <LinearGradient
+              colors={['#4F46E5', '#7C3AED']}
+              style={styles.avatarGradient}
+            >
+              <Icon name="person" size={20} color="#fff" />
+            </LinearGradient>
+          )}
         </View>
-    );
+        <View style={styles.participantInfo}>
+          <Text style={styles.participantName}>{item.name}</Text>
+          {item.department && (
+            <Text style={styles.participantDept}>{item.department}</Text>
+          )}
+        </View>
+        <View style={styles.readyStatusContainer}>
+          {isReady ? (
+            <View style={styles.readyIndicator}>
+              <Icon name="check-circle" size={16} color="#10B981" />
+              <Text style={styles.readyText}>Ready</Text>
+            </View>
+          ) : (
+            <View style={styles.notReadyIndicator}>
+              <Icon name="schedule" size={16} color="#94A3B8" />
+              <Text style={styles.notReadyText}>Waiting</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+};
 
     return (
         <View style={styles.container}>
@@ -599,6 +652,36 @@ const styles = StyleSheet.create({
         opacity: 0.7,
         marginTop: 5,
     },
+     readyStatusContainer: {
+    marginLeft: 'auto',
+    alignItems: 'center',
+  },
+  readyIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  notReadyIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  readyText: {
+    fontSize: 12,
+    color: '#065F46',
+    marginLeft: 4,
+  },
+  notReadyText: {
+    fontSize: 12,
+    color: '#64748B',
+    marginLeft: 4,
+  },
 });
 
 

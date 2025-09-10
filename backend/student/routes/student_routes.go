@@ -70,5 +70,11 @@ router.Handle("/student/level/check", middleware.StudentOnly(
         http.HandlerFunc(controllers.GetQuestionsForStudent)))
     router.Handle("/student/session/status", middleware.StudentOnly(
     http.HandlerFunc(controllers.UpdateSessionStatus)))
+    router.Handle("/student/session/ready", middleware.StudentOnly(
+        http.HandlerFunc(controllers.UpdateReadyStatus)))
+    router.Handle("/student/session/ready-status", middleware.StudentOnly(
+        http.HandlerFunc(controllers.GetReadyStatus)))
+    router.Handle("/student/session/check-all-ready", middleware.StudentOnly(
+        http.HandlerFunc(controllers.CheckAllReady)))
     return router
 }

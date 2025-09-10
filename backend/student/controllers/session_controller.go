@@ -37,6 +37,161 @@ type SurveyResponse struct {
 	Rankings map[int]string `json:"rankings"`
 }
 
+type ReadyStatus struct {
+    StudentID string `json:"student_id"`
+    IsReady   bool   `json:"is_ready"`
+    Timestamp string `json:"timestamp"`
+}
+
+func UpdateReadyStatus(w http.ResponseWriter, r *http.Request) {
+    studentID := r.Context().Value("studentID").(string)
+    
+    var req struct {
+        SessionID string `json:"session_id"`
+        IsReady   bool   `json:"is_ready"`
+    }
+    
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+        return
+    }
+    
+    // Verify student is part of this session
+    var isParticipant bool
+    err := database.GetDB().QueryRow(`
+        SELECT EXISTS(
+            SELECT 1 FROM session_participants 
+            WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
+        )`, req.SessionID, studentID).Scan(&isParticipant)
+    
+    if err != nil || !isParticipant {
+        w.WriteHeader(http.StatusForbidden)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized for this session"})
+        return
+    }
+    
+    // Update or insert ready status
+    _, err = database.GetDB().Exec(`
+        INSERT INTO session_ready_status (session_id, student_id, is_ready, updated_at)
+        VALUES (?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE is_ready = ?, updated_at = NOW()`,
+        req.SessionID, studentID, req.IsReady, req.IsReady)
+    
+    if err != nil {
+        log.Printf("Error updating ready status: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update ready status"})
+        return
+    }
+    
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
+}
+
+
+func GetReadyStatus(w http.ResponseWriter, r *http.Request) {
+    sessionID := r.URL.Query().Get("session_id")
+    if sessionID == "" {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
+        return
+    }
+    
+    studentID := r.Context().Value("studentID").(string)
+    
+    // Verify student is part of this session
+    var isParticipant bool
+    err := database.GetDB().QueryRow(`
+        SELECT EXISTS(
+            SELECT 1 FROM session_participants 
+            WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
+        )`, sessionID, studentID).Scan(&isParticipant)
+    
+    if err != nil || !isParticipant {
+        w.WriteHeader(http.StatusForbidden)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized for this session"})
+        return
+    }
+    
+    // Get all ready statuses for this session
+    rows, err := database.GetDB().Query(`
+        SELECT srs.student_id, su.full_name, srs.is_ready, srs.updated_at
+        FROM session_ready_status srs
+        JOIN student_users su ON srs.student_id = su.id
+        WHERE srs.session_id = ?
+        ORDER BY srs.updated_at DESC`, sessionID)
+    
+    if err != nil {
+        log.Printf("Error getting ready status: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to get ready status"})
+        return
+    }
+    defer rows.Close()
+    
+    var readyStatuses []ReadyStatus
+    for rows.Next() {
+        var status ReadyStatus
+        var name string
+        var timestamp sql.NullString
+        if err := rows.Scan(&status.StudentID, &name, &status.IsReady, &timestamp); err != nil {
+            continue
+        }
+        status.Timestamp = timestamp.String
+        readyStatuses = append(readyStatuses, status)
+    }
+    
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "ready_statuses": readyStatuses,
+        "total_ready":    len(readyStatuses),
+    })
+}
+
+
+func CheckAllReady(w http.ResponseWriter, r *http.Request) {
+    sessionID := r.URL.Query().Get("session_id")
+    if sessionID == "" {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
+        return
+    }
+    
+    // Get total participants
+    var totalParticipants int
+    err := database.GetDB().QueryRow(`
+        SELECT COUNT(DISTINCT student_id)
+        FROM session_participants 
+        WHERE session_id = ? AND is_dummy = FALSE`, sessionID).Scan(&totalParticipants)
+    
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+    
+    // Get ready participants
+    var readyParticipants int
+    err = database.GetDB().QueryRow(`
+        SELECT COUNT(DISTINCT student_id)
+        FROM session_ready_status 
+        WHERE session_id = ? AND is_ready = TRUE`, sessionID).Scan(&readyParticipants)
+    
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+    
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "all_ready":          readyParticipants >= totalParticipants && totalParticipants > 0,
+        "ready_count":        readyParticipants,
+        "total_participants": totalParticipants,
+    })
+}
+
 func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	sessionID := r.URL.Query().Get("session_id")
