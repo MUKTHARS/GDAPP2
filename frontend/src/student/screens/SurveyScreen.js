@@ -84,13 +84,13 @@ const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
               style={styles.removeButtonContainer}
               onPress={() => onSelect(currentRank, null)}
             >
-              <LinearGradient
+              {/* <LinearGradient
                 colors={['#EF4444', '#DC2626']}
                 style={styles.removeButton}
               >
                 <Icon name="close" size={16} color="#fff" />
                 <Text style={styles.removeButtonText}>Remove</Text>
-              </LinearGradient>
+              </LinearGradient> */}
             </TouchableOpacity>
           </View>
         ) : (
@@ -155,7 +155,7 @@ export default function SurveyScreen({ navigation, route }) {
   const [allQuestions, setAllQuestions] = useState([]);
   const [shuffledQuestions, setShuffledQuestions] = useState([]);
   const [questions, setQuestions] = useState([]);
-  
+   const [timerCompleted, setTimerCompleted] = useState(false);
   const [confirmedQuestions, setConfirmedQuestions] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selections, setSelections] = useState({});
@@ -283,14 +283,14 @@ useEffect(() => {
   fetchQuestions();
 }, [sessionId, userSeed]);
 
-  useEffect(() => {
+ useEffect(() => {
     let timerInterval;
-    let timeoutCheckInterval;
     
     const startTimer = async () => {
         try {
             setIsTimedOut(false);
             setTimeRemaining(30);
+            setTimerCompleted(false); // Reset timer completion state
             
             await api.student.startQuestionTimer(sessionId, currentQuestion + 1);
             
@@ -299,27 +299,13 @@ useEffect(() => {
                     if (prev <= 1) {
                         clearInterval(timerInterval);
                         setIsTimedOut(true);
+                        setTimerCompleted(true); // Mark timer as completed
                         handleTimeout();
                         return 0;
                     }
                     return prev - 1;
                 });
             }, 1000);
-            
-            timeoutCheckInterval = setInterval(async () => {
-                try {
-                    const response = await api.student.checkQuestionTimeout(
-                        sessionId, 
-                        currentQuestion + 1
-                    );
-                    
-                    if (response.data?.is_timed_out && !penalties[currentQuestion]) {
-                        handleTimeout();
-                    }
-                } catch (err) {
-                    console.log('Timeout check error:', err);
-                }
-            }, 5000);
             
         } catch (err) {
             console.log('Timer setup error:', err);
@@ -328,6 +314,7 @@ useEffect(() => {
                     if (prev <= 1) {
                         clearInterval(timerInterval);
                         setIsTimedOut(true);
+                        setTimerCompleted(true); // Mark timer as completed
                         handleTimeout();
                         return 0;
                     }
@@ -350,10 +337,10 @@ useEffect(() => {
                     ...prev,
                     [currentQuestion]: true
                 }));
-                Alert.alert(
-                    "Time's Up!", 
-                    "You've been penalized 0.5 points for not completing this question in time"
-                );
+                // Alert.alert(
+                //     "Time's Up!", 
+                //     "You've been penalized 0.5 points for not completing this question in time"
+                // );
             } catch (err) {
                 console.log('Penalty application error:', err);
             }
@@ -364,7 +351,7 @@ useEffect(() => {
     
     return () => {
         clearInterval(timerInterval);
-        clearInterval(timeoutCheckInterval);
+        // clearInterval(timeoutCheckInterval);
     };
   }, [currentQuestion]);
 
@@ -430,9 +417,19 @@ const handleSelect = (rank, memberId) => {
   });
 };
 
-const confirmCurrentQuestion = async () => {
+ const confirmCurrentQuestion = async () => {
     const currentSelections = selections[currentQuestion] || {};
     const hasAtLeastOneRank = Object.keys(currentSelections).length > 0;
+    
+    // Check if timer is still running
+    if (!timerCompleted && timeRemaining > 0) {
+      Alert.alert(
+        "Timer Still Running",
+        "Please wait for the timer to complete before proceeding to the next question.",
+        [{ text: "OK", style: "cancel" }]
+      );
+      return;
+    }
     
     if (!hasAtLeastOneRank && !penalties[currentQuestion]) {
         Alert.alert(
@@ -470,7 +467,7 @@ const confirmCurrentQuestion = async () => {
     }
 
     proceedToNextQuestion(true);
-};
+  };
 
 const proceedToNextQuestion = async (isPartial = false) => {
     setIsSubmitting(true);
@@ -565,18 +562,8 @@ const proceedToNextQuestion = async (isPartial = false) => {
                 <Icon name="timer" size={20} color="#4F46E5" />
                 <Text style={styles.timerText}>{timeRemaining}s</Text>
               </View>
-              {isTimedOut && (
-                <View style={styles.timeoutBadge}>
-                  <Icon name="warning" size={16} color="#EF4444" />
-                  <Text style={styles.timeoutText}>Time's Up!</Text>
-                </View>
-              )}
-              {penalties[currentQuestion] && (
-                <View style={styles.penaltyBadge}>
-                  <Icon name="report" size={16} color="#F59E0B" />
-                  <Text style={styles.penaltyText}>Penalty</Text>
-                </View>
-              )}
+              
+              
             </View>
             
             {/* Question Row */}
@@ -670,35 +657,45 @@ const proceedToNextQuestion = async (isPartial = false) => {
                   </View>
                 ) : (
                   <TouchableOpacity
-                    style={styles.confirmButtonContainer}
-                    onPress={confirmCurrentQuestion}
-                    disabled={Object.keys(currentRankings).length < 1 || isSubmitting}
-                    activeOpacity={0.8}
-                  >
-                    <LinearGradient
-                      colors={(Object.keys(currentRankings).length < 1 || isSubmitting)
-                        ? ['#6B7280', '#4B5563']
-                        : currentQuestion < shuffledQuestions.length - 1 
-                          ? ['#10B981', '#059669'] 
-                          : ['#F59E0B', '#D97706']}
-                      style={styles.confirmButton}
-                    >
-                      {isSubmitting ? (
-                        <ActivityIndicator color="white" size="small" />
-                      ) : (
-                        <>
-                          <Text style={styles.confirmButtonText}>
-                            {currentQuestion < shuffledQuestions.length - 1 ? 'Confirm & Next' : 'Submit Survey'}
-                          </Text>
-                          <Icon 
-                            name={currentQuestion < shuffledQuestions.length - 1 ? "check" : "send"} 
-                            size={20} 
-                            color="#fff" 
-                          />
-                        </>
-                      )}
-                    </LinearGradient>
-                  </TouchableOpacity>
+    style={styles.confirmButtonContainer}
+    onPress={confirmCurrentQuestion}
+    disabled={
+      (Object.keys(currentRankings).length < 1 || isSubmitting || 
+      (!timerCompleted && timeRemaining > 0)) // Disable if timer still running
+    }
+    activeOpacity={0.8}
+  >
+    <LinearGradient
+      colors={((Object.keys(currentRankings).length < 1 || isSubmitting || 
+               (!timerCompleted && timeRemaining > 0)) // Same condition for colors
+        ? ['#6B7280', '#4B5563']
+        : currentQuestion < shuffledQuestions.length - 1 
+          ? ['#10B981', '#059669'] 
+          : ['#F59E0B', '#D97706'])}
+      style={styles.confirmButton}
+    >
+      {isSubmitting ? (
+        <ActivityIndicator color="white" size="small" />
+      ) : (
+        <>
+          <Text style={styles.confirmButtonText}>
+            {(!timerCompleted && timeRemaining > 0) 
+              ? `Wait ${timeRemaining}s` 
+              : currentQuestion < shuffledQuestions.length - 1 
+                ? 'Confirm & Next' 
+                : 'Submit Survey'}
+          </Text>
+          {(!timerCompleted && timeRemaining > 0) ? null : (
+            <Icon 
+              name={currentQuestion < shuffledQuestions.length - 1 ? "check" : "send"} 
+              size={20} 
+              color="#fff" 
+            />
+          )}
+        </>
+      )}
+    </LinearGradient>
+  </TouchableOpacity>
                 )}
               </View>
             </View>

@@ -182,38 +182,7 @@ const fetchUserProfile = async () => {
             </View>
           </View>
 
-          {/* Stats Section */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statsCard}>
-              <Text style={styles.sectionTitle}>Session Statistics</Text>
-              
-              <View style={styles.statsGrid}>
-                <View style={styles.statItem}>
-                  <View style={styles.statIconContainer}>
-                    <Icon name="group" size={24} color="#4CAF50" />
-                  </View>
-                  <Text style={styles.statNumber}>0</Text>
-                  <Text style={styles.statLabel}>Sessions</Text>
-                </View>
-
-                <View style={styles.statItem}>
-                  <View style={styles.statIconContainer}>
-                    <Icon name="trending-up" size={24} color="#2196F3" />
-                  </View>
-                  <Text style={styles.statNumber}>0</Text>
-                  <Text style={styles.statLabel}>Progress</Text>
-                </View>
-
-                <View style={styles.statItem}>
-                  <View style={styles.statIconContainer}>
-                    <Icon name="emoji-events" size={24} color="#FF9800" />
-                  </View>
-                  <Text style={styles.statNumber}>0</Text>
-                  <Text style={styles.statLabel}>Achievements</Text>
-                </View>
-              </View>
-            </View>
-          </View>
+          
         </View>
       </ScrollView>
     </View>

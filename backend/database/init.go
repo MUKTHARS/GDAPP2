@@ -76,6 +76,8 @@ func InitDB(db *sql.DB) error {
             current_booking VARCHAR(36) NULL,
             current_gd_level INT DEFAULT 1,
             is_active BOOLEAN DEFAULT TRUE,
+            level_marks JSON DEFAULT NULL,
+            level_ranks JSON DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY  (current_booking) REFERENCES gd_sessions(id) ON DELETE SET NULL
         )`,
