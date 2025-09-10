@@ -278,7 +278,7 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
 
 	// Set default values
 	agenda.PrepTime = 5
-	agenda.Discussion = 20
+	agenda.Discussion = 1
 	agenda.Survey = 1
 
 	if len(agendaJSON) > 0 {
@@ -2213,7 +2213,7 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
 	_, err := database.GetDB().Exec(`
         DELETE FROM session_phase_tracking 
         WHERE session_id = ? 
-        AND start_time < DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
+        AND start_time < DATE_SUB(NOW(), INTERVAL 24 HOUR)`,
 		sessionID)
 	if err != nil {
 		log.Printf("Error cleaning up stale phase tracking: %v", err)

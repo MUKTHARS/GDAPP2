@@ -150,8 +150,8 @@ func GetSessionRules(w http.ResponseWriter, r *http.Request) {
     }
     
     // Set default values
-    agenda.PrepTime = 5
-    agenda.Discussion = 20
+    agenda.PrepTime = 1
+    agenda.Discussion = 1
     agenda.Survey = 5
     
     if len(agendaJSON) > 0 {
