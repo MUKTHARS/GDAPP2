@@ -138,7 +138,7 @@ adminID := r.Context().Value("userID").(string)
     qrID := uuid.New().String()
 
     // Set max capacity to 2 (not 15) - keep 15 commented as requested
-    maxCapacity := 13 // 15 // Keep 15 commented near 2
+    maxCapacity := 15 // 15 // Keep 15 commented near 2
 
     // Store the new QR code with fixed capacity of 2
    _, err = database.GetDB().Exec(`

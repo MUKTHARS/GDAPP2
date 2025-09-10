@@ -73,10 +73,10 @@ func UpdateReadyStatus(w http.ResponseWriter, r *http.Request) {
     
     // Update or insert ready status
     _, err = database.GetDB().Exec(`
-        INSERT INTO session_ready_status (session_id, student_id, is_ready, updated_at)
-        VALUES (?, ?, ?, NOW())
-        ON DUPLICATE KEY UPDATE is_ready = ?, updated_at = NOW()`,
-        req.SessionID, studentID, req.IsReady, req.IsReady)
+        INSERT INTO session_ready_status (id, session_id, student_id, is_ready, updated_at)
+        VALUES (UUID(), ?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE is_ready = VALUES(is_ready), updated_at = NOW()`,
+        req.SessionID, studentID, req.IsReady)
     
     if err != nil {
         log.Printf("Error updating ready status: %v", err)
@@ -85,8 +85,57 @@ func UpdateReadyStatus(w http.ResponseWriter, r *http.Request) {
         return
     }
     
+    log.Printf("Updated ready status for student %s in session %s to %t", studentID, req.SessionID, req.IsReady)
+    
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
+}
+
+func CheckAllReady(w http.ResponseWriter, r *http.Request) {
+    sessionID := r.URL.Query().Get("session_id")
+    if sessionID == "" {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
+        return
+    }
+    
+    // Get total participants for THIS session (non-dummy)
+    var totalParticipants int
+    err := database.GetDB().QueryRow(`
+        SELECT COUNT(DISTINCT student_id)
+        FROM session_participants 
+        WHERE session_id = ? AND is_dummy = FALSE`, sessionID).Scan(&totalParticipants)
+    
+    if err != nil {
+        log.Printf("Error getting total participants: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+    
+    // Get ready participants for THIS session
+    var readyParticipants int
+    err = database.GetDB().QueryRow(`
+        SELECT COUNT(DISTINCT srs.student_id)
+        FROM session_ready_status srs
+        JOIN session_participants sp ON srs.session_id = sp.session_id AND srs.student_id = sp.student_id
+        WHERE srs.session_id = ? AND srs.is_ready = TRUE AND sp.is_dummy = FALSE`, sessionID).Scan(&readyParticipants)
+    
+    if err != nil {
+        log.Printf("Error getting ready participants: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+    
+    log.Printf("CheckAllReady - Session: %s, Ready: %d, Total: %d", sessionID, readyParticipants, totalParticipants)
+    
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "all_ready":          readyParticipants >= totalParticipants && totalParticipants > 0,
+        "ready_count":        readyParticipants,
+        "total_participants": totalParticipants,
+    })
 }
 
 
@@ -149,48 +198,6 @@ func GetReadyStatus(w http.ResponseWriter, r *http.Request) {
     })
 }
 
-
-func CheckAllReady(w http.ResponseWriter, r *http.Request) {
-    sessionID := r.URL.Query().Get("session_id")
-    if sessionID == "" {
-        w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
-        return
-    }
-    
-    // Get total participants
-    var totalParticipants int
-    err := database.GetDB().QueryRow(`
-        SELECT COUNT(DISTINCT student_id)
-        FROM session_participants 
-        WHERE session_id = ? AND is_dummy = FALSE`, sessionID).Scan(&totalParticipants)
-    
-    if err != nil {
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-        return
-    }
-    
-    // Get ready participants
-    var readyParticipants int
-    err = database.GetDB().QueryRow(`
-        SELECT COUNT(DISTINCT student_id)
-        FROM session_ready_status 
-        WHERE session_id = ? AND is_ready = TRUE`, sessionID).Scan(&readyParticipants)
-    
-    if err != nil {
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-        return
-    }
-    
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]interface{}{
-        "all_ready":          readyParticipants >= totalParticipants && totalParticipants > 0,
-        "ready_count":        readyParticipants,
-        "total_participants": totalParticipants,
-    })
-}
 
 func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -270,19 +277,19 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set default values
-	agenda.PrepTime = 1
-	agenda.Discussion = 1
+	agenda.PrepTime = 5
+	agenda.Discussion = 20
 	agenda.Survey = 1
 
 	if len(agendaJSON) > 0 {
 		if err := json.Unmarshal(agendaJSON, &agenda); err != nil {
 			log.Printf("Error parsing agenda JSON: %v", err)
 			// Use defaults if parsing fails
-		} else {
-			// Ensure values are in minutes (not seconds)
-			if agenda.Discussion > 5 { // If somehow seconds got stored
-				agenda.Discussion = agenda.Discussion / 5
-			}
+		// } else {
+		// 	// Ensure values are in minutes (not seconds)
+		// 	if agenda.Discussion > 5 { // If somehow seconds got stored
+		// 		agenda.Discussion = agenda.Discussion / 5
+		// 	}
 		}
 	}
 
@@ -1273,12 +1280,16 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
                 log.Printf("Warning: Could not calculate penalties: %v", err)
             }
             
-            // NEW: Update student levels after penalties are calculated
+    
             if err := updateStudentLevel(sessionID); err != nil {
                 log.Printf("Warning: Could not update student levels: %v", err)
             }
             if err := clearCompletedBookings(sessionID); err != nil {
                 log.Printf("Warning: Could not clear completed bookings: %v", err)
+            }
+
+             if err := clearSessionReadyStatus(sessionID); err != nil {
+                log.Printf("Warning: Could not clear session ready status: %v", err)
             }
         }
     }
@@ -2356,4 +2367,26 @@ func MarkSurveyCompleted(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+
+func clearSessionReadyStatus(sessionID string) error {
+    tx, err := database.GetDB().Begin()
+    if err != nil {
+        return fmt.Errorf("failed to begin transaction: %v", err)
+    }
+    defer tx.Rollback()
+
+    // Delete all ready status entries for this session
+    _, err = tx.Exec(`
+        DELETE FROM session_ready_status 
+        WHERE session_id = ?`, sessionID)
+    
+    if err != nil {
+        return fmt.Errorf("error clearing session ready status: %v", err)
+    }
+
+    log.Printf("Cleared session_ready_status for session %s", sessionID)
+    
+    return tx.Commit()
 }

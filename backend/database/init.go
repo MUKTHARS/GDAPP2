@@ -82,7 +82,17 @@ func InitDB(db *sql.DB) error {
             FOREIGN KEY  (current_booking) REFERENCES gd_sessions(id) ON DELETE SET NULL
         )`,
 
-       
+       `CREATE TABLE IF NOT EXISTS session_ready_status (
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL,
+    student_id VARCHAR(36) NOT NULL,
+    is_ready BOOLEAN DEFAULT FALSE,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_session_student (session_id, student_id),
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE
+);`,
 
         // Session tables
 

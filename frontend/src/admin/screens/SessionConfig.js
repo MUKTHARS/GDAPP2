@@ -60,7 +60,7 @@ export default function SessionConfig() {
       // Create agenda in the exact format needed
       const agenda = {
         prep_time: parseInt(prepTime) || 2,
-        discussion: parseInt(discussionTime) || 2,
+        discussion: parseInt(discussionTime) || 20,
         survey: parseInt(surveyTime) || 1
       };
 
@@ -86,7 +86,7 @@ export default function SessionConfig() {
         fetchSavedSessions();
         // Reset form to default values
         setPrepTime('2');
-        setDiscussionTime('2');
+        setDiscussionTime('20');
         setSurveyTime('1');
         setSessionDuration(5);
         setStartTime(new Date());

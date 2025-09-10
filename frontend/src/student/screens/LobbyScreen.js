@@ -15,28 +15,30 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import HamburgerHeader from '../components/HamburgerHeader';
 import auth from '../services/auth';
+
 export default function LobbyScreen({ navigation, route }) {
     const { sessionId } = route.params;
     const [participants, setParticipants] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isReady, setIsReady] = useState(false);
-    const [timeRemaining, setTimeRemaining] = useState(120); // 2 minutes in seconds
-    const [timerActive, setTimerActive] = useState(false); // Changed to false initially
+    const [timeRemaining, setTimeRemaining] = useState(120);
+    const [timerActive, setTimerActive] = useState(false);
     const [backgroundTime, setBackgroundTime] = useState(null);
     const [appState, setAppState] = useState(AppState.currentState);
     const [readyStatuses, setReadyStatuses] = useState([]);
     const [allReady, setAllReady] = useState(false);
-    // Track app state changes (foreground/background)
+    const [readyCount, setReadyCount] = useState(0);
+    const [totalParticipantsCount, setTotalParticipantsCount] = useState(0);
+
+    // App state handling (unchanged)
     useEffect(() => {
         const handleAppStateChange = (nextAppState) => {
             if (appState.match(/inactive|background/) && nextAppState === 'active') {
-                // App came to foreground, recalculate time
                 if (backgroundTime && timerActive) {
                     const elapsedSeconds = Math.floor((Date.now() - backgroundTime) / 1000);
                     setTimeRemaining(prev => Math.max(0, prev - elapsedSeconds));
                 }
             } else if (nextAppState.match(/inactive|background/)) {
-                // App going to background, store current time
                 setBackgroundTime(Date.now());
             }
             setAppState(nextAppState);
@@ -47,9 +49,9 @@ export default function LobbyScreen({ navigation, route }) {
         return () => {
             subscription.remove();
         };
-    }, [appState, backgroundTime, timerActive]); // Added timerActive dependency
+    }, [appState, backgroundTime, timerActive]);
 
-    // Timer effect - only runs when timerActive is true
+    // Timer effect (unchanged)
     useEffect(() => {
         let timerInterval;
         
@@ -70,40 +72,56 @@ export default function LobbyScreen({ navigation, route }) {
             if (timerInterval) clearInterval(timerInterval);
         };
     }, [timerActive]);
+
 useEffect(() => {
-  const fetchReadyStatus = async () => {
+  const checkAllReadyAndNavigate = async () => {
     try {
-      // Try to get ready status from backend
-      const response = await api.student.getReadyStatus(sessionId);
-      setReadyStatuses(response.data.ready_statuses || []);
-      
-      // Try to check if all are ready
       const allReadyResponse = await api.student.checkAllReady(sessionId);
-      setAllReady(allReadyResponse.data.all_ready || false);
+      const allReady = allReadyResponse.data.all_ready || false;
+      const readyCount = allReadyResponse.data.ready_count || 0;
+      const totalParticipants = allReadyResponse.data.total_participants || 0;
       
-      // If all participants are ready, navigate to session
-      if (allReadyResponse.data.all_ready) {
+      setAllReady(allReady);
+      setReadyCount(readyCount);
+      setTotalParticipantsCount(totalParticipants);
+      
+      console.log('Ready check:', readyCount, '/', totalParticipants, 'ready');
+      
+      if (allReady) {
+        console.log('All participants ready, navigating to GD session');
         navigation.replace('GdSession', { sessionId });
       }
     } catch (error) {
-      console.error('Error fetching ready status:', error);
-      // Fallback: Use local state to track ready status
-      // This will work until backend routes are implemented
-      setReadyStatuses([]);
+      console.error('Error checking all ready status:', error);
       setAllReady(false);
     }
   };
   
-  // Initial fetch
-  fetchReadyStatus();
+  // Initial check
+  checkAllReadyAndNavigate();
   
-  // Poll every 3 seconds
-  const readyInterval = setInterval(fetchReadyStatus, 3000);
+  // Poll every 2 seconds for ready status
+  const readyInterval = setInterval(checkAllReadyAndNavigate, 2000);
   
   return () => {
     clearInterval(readyInterval);
   };
-}, [sessionId]);
+}, [sessionId, navigation]);
+
+    const fetchReadyStatus = async () => {
+      try {
+        const response = await api.student.getReadyStatus(sessionId);
+        const statuses = response.data.ready_statuses || [];
+        setReadyStatuses(statuses);
+        
+        const actualReadyCount = statuses.filter(s => s.is_ready).length;
+        setReadyCount(actualReadyCount);
+        
+      } catch (error) {
+        console.error('Error fetching ready status:', error);
+        setReadyStatuses([]);
+      }
+    };
 
     const fetchParticipants = async () => {
         try {
@@ -136,52 +154,65 @@ useEffect(() => {
     };
 
     useEffect(() => {
-        // Initial fetch
         fetchParticipants();
-
-        // Poll every 5 seconds
         const interval = setInterval(fetchParticipants, 5000);
-
         return () => {
             clearInterval(interval);
         };
     }, [sessionId]);
 
-const handleReady = async () => {
+   const handleReady = async () => {
   try {
     setIsReady(true);
     
     // Update ready status in backend
     await api.student.updateReadyStatus(sessionId, true);
     
-    // Start the timer when user clicks "I'm Ready"
-    setTimerActive(true);
-
-    const token = await AsyncStorage.getItem('token');
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
-
-    await api.put('/student/session/status', { 
-      sessionId, 
-      status: 'active'
-    }, {
-      headers: {
-        Authorization: `Bearer ${token.replace(/['"]+/g, '')}`
-      }
-    });
+    // Immediately check if all are ready after updating
+    const allReadyResponse = await api.student.checkAllReady(sessionId);
+    const allReady = allReadyResponse.data.all_ready || false;
+    setAllReady(allReady);
     
+    console.log('Ready button clicked, all ready:', allReady);
+    
+    // If all are ready, navigate immediately
+    if (allReady) {
+      navigation.replace('GdSession', { sessionId });
+    }
   } catch (error) {
-    console.error('Error starting session:', error);
+    console.error('Error updating ready status:', error);
     setIsReady(false);
-    setTimerActive(false);
   }
 };
 
-const getReadyStatusForParticipant = (participantId) => {
-  const status = readyStatuses.find(s => s.student_id === participantId);
-  return status ? status.is_ready : false;
-};
+    const getReadyStatusForParticipant = (participantId) => {
+      const status = readyStatuses.find(s => s.student_id === participantId);
+      return status ? status.is_ready : false;
+    };
+
+useEffect(() => {
+  const fetchReadyStatus = async () => {
+    try {
+      const response = await api.student.getReadyStatus(sessionId);
+      const statuses = response.data.ready_statuses || [];
+      setReadyStatuses(statuses);
+      
+      const actualReadyCount = statuses.filter(s => s.is_ready).length;
+      setReadyCount(actualReadyCount);
+      
+    } catch (error) {
+      console.error('Error fetching ready status:', error);
+      setReadyStatuses([]);
+    }
+  };
+  
+  fetchReadyStatus();
+  const statusInterval = setInterval(fetchReadyStatus, 3000);
+  
+  return () => {
+    clearInterval(statusInterval);
+  };
+}, [sessionId]);
 
 // Navigate when timer completes
     useEffect(() => {
@@ -214,7 +245,7 @@ const getReadyStatusForParticipant = (participantId) => {
         );
     }
 
-  const renderParticipantItem = ({ item, index }) => {
+const renderParticipantItem = ({ item, index }) => {
   const isReady = getReadyStatusForParticipant(item.id);
   
   return (
@@ -262,7 +293,7 @@ const getReadyStatusForParticipant = (participantId) => {
   );
 };
 
-    return (
+ return (
         <View style={styles.container}>
             <HamburgerHeader title='Lobby'/>
             <View style={styles.contentContainer}>
@@ -271,9 +302,6 @@ const getReadyStatusForParticipant = (participantId) => {
                     <Text style={styles.title}>Session Lobby</Text>
                     <Text style={styles.subtitle}>Waiting for participants to join...</Text>
                 </View>
-
-                {/* Timer Section - Only show when timer is active */}
-               
 
                 {/* Stats Section */}
                 <View style={styles.statsContainer}>
@@ -340,42 +368,48 @@ const getReadyStatusForParticipant = (participantId) => {
 
                 {/* Ready Button */}
                 <View style={styles.bottomContainer}>
-                    <TouchableOpacity 
-                        style={[
-                            styles.readyButton,
-                            (!isReadyButtonEnabled || isReady) && styles.readyButtonDisabled
-                        ]}
-                        onPress={handleReady}
-                        disabled={!isReadyButtonEnabled || isReady}
-                        activeOpacity={0.8}
+                  <TouchableOpacity 
+                    style={[
+                      styles.readyButton,
+                      isReady && styles.readyButtonDisabled
+                    ]}
+                    onPress={handleReady}
+                    disabled={isReady}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={isReady ? ['#6B7280', '#4B5563'] : ['#10B981', '#059669']}
+                      start={{x: 0, y: 0}}
+                      end={{x: 1, y: 1}}
+                      style={styles.readyButtonGradient}
                     >
-                        <LinearGradient
-                            colors={(!isReadyButtonEnabled || isReady) ? ['#6B7280', '#4B5563'] : ['#10B981', '#059669']}
-                            start={{x: 0, y: 0}}
-                            end={{x: 1, y: 1}}
-                            style={styles.readyButtonGradient}
-                        >
-                            <View style={styles.readyButtonContent}>
-                                {isReady ? (
-                                    <>
-                                        <ActivityIndicator size="small" color="#fff" />
-                                        <Text style={styles.readyButtonText}>
-                                            {timerActive ? formatTime(timeRemaining) : 'Starting Session...'}
-                                        </Text>
-                                    </>
-                                ) : (
-                                    <>
-                                        <Icon name="play-arrow" size={24} color="#fff" />
-                                        <Text style={styles.readyButtonText}>I'm Ready</Text>
-                                    </>
-                                )}
-                            </View>
-                        </LinearGradient>
-                    </TouchableOpacity>
-                    
-                    <Text style={styles.readyHint}>
-                        {isReady ? (timerActive ? `Session begins in ${formatTime(timeRemaining)}` : 'Launching your session...') : 'Tap when you\'re ready to begin'}
+                      <View style={styles.readyButtonContent}>
+                        {isReady ? (
+                          <>
+                            <Icon name="check" size={24} color="#fff" />
+                            <Text style={styles.readyButtonText}>Ready</Text>
+                          </>
+                        ) : (
+                          <>
+                            <Icon name="play-arrow" size={24} color="#fff" />
+                            <Text style={styles.readyButtonText}>I'm Ready</Text>
+                          </>
+                        )}
+                      </View>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                  
+                  <Text style={styles.readyHint}>
+                    {allReady ? 'All participants are ready! Starting session...' : 
+                     isReady ? 'Waiting for other participants...' : 
+                     'Tap when you\'re ready to begin'}
+                  </Text>
+                  
+                  {!allReady && (
+                    <Text style={styles.waitingText}>
+                      {readyCount} of {totalParticipantsCount} participants ready
                     </Text>
+                  )}
                 </View>
             </View>
         </View>
@@ -652,36 +686,44 @@ const styles = StyleSheet.create({
         opacity: 0.7,
         marginTop: 5,
     },
-     readyStatusContainer: {
-    marginLeft: 'auto',
-    alignItems: 'center',
-  },
-  readyIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#D1FAE5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  notReadyIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  readyText: {
-    fontSize: 12,
-    color: '#065F46',
-    marginLeft: 4,
-  },
-  notReadyText: {
-    fontSize: 12,
-    color: '#64748B',
-    marginLeft: 4,
-  },
+   readyStatusContainer: {
+  flexDirection: 'row',
+  alignItems: 'center',
+},
+readyIndicator: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#ECFDF5',
+  paddingHorizontal: 8,
+  paddingVertical: 4,
+  borderRadius: 12,
+},
+notReadyIndicator: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#F1F5F9',
+  paddingHorizontal: 8,
+  paddingVertical: 4,
+  borderRadius: 12,
+},
+readyText: {
+  color: '#065F46',
+  fontSize: 12,
+  fontWeight: '500',
+  marginLeft: 4,
+},
+notReadyText: {
+  color: '#64748B',
+  fontSize: 12,
+  fontWeight: '500',
+  marginLeft: 4,
+},
+waitingText: {
+  color: '#64748B',
+  fontSize: 14,
+  textAlign: 'center',
+  marginTop: 8,
+},
 });
 
 

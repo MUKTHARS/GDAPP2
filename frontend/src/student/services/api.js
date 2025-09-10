@@ -4,8 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from './auth';
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.10.122.91:8080' 
-    : 'http://10.10.122.91:8080',
+    ? 'http://10.150.254.159:8080' 
+    : 'http://10.150.254.159:8080',
 });
 
 api.interceptors.request.use(async (config) => {
@@ -392,8 +392,6 @@ getResults: (sessionId) => {
     };
   });
 },
-
-
 submitFeedback: (sessionId, rating, comments) => api.post('/student/feedback', {
     session_id: sessionId,
     rating: rating,
@@ -520,12 +518,20 @@ getSessionTopic: (level) => api.get('/student/topic', {
     function (data) {
       try {
         const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-        return parsed;
+        
+        // Ensure we always return an object with the expected structure
+        return {
+          topic_text: parsed.topic_text || "Discuss the impact of technology on modern education",
+          prep_materials: parsed.prep_materials || {},
+          level: parsed.level || level, // Use the passed level parameter as fallback
+          ...parsed // Include any other properties that might exist
+        };
       } catch (e) {
         console.error('Topic response parsing error:', e);
         return {
           topic_text: "Discuss the impact of technology on modern education",
-          prep_materials: {}
+          prep_materials: {},
+          level: level // Use the passed level parameter
         };
       }
     }
@@ -535,11 +541,11 @@ getSessionTopic: (level) => api.get('/student/topic', {
   return {
     data: {
       topic_text: "Discuss the impact of technology on modern education",
-      prep_materials: {}
+      prep_materials: {},
+      level: level // Use the passed level parameter
     }
   };
 }),
-
 
 getSessionRules: (sessionId) => api.get('/student/session/rules', { 
     params: { session_id: sessionId },
@@ -582,29 +588,17 @@ getSessionRules: (sessionId) => api.get('/student/session/rules', {
     };
 }),
 
-  updateReadyStatus: (sessionId, isReady) => api.post('/student/session/ready', {
+updateReadyStatus: (sessionId, isReady) => api.post('/student/session/ready', {
     session_id: sessionId,
     is_ready: isReady
-  }).catch(error => {
-    console.log('Update ready status error, using fallback:', error);
-    // Return a successful response to allow the UI to continue
-    return { data: { status: 'success' } };
   }),
   
   getReadyStatus: (sessionId) => api.get('/student/session/ready-status', {
     params: { session_id: sessionId }
-  }).catch(error => {
-    console.log('Get ready status error, using fallback:', error);
-    // Return empty array as fallback
-    return { data: { ready_statuses: [] } };
   }),
   
   checkAllReady: (sessionId) => api.get('/student/session/check-all-ready', {
     params: { session_id: sessionId }
-  }).catch(error => {
-    console.log('Check all ready error, using fallback:', error);
-    // Return false as fallback
-    return { data: { all_ready: false } };
   }),
   };
 

@@ -402,11 +402,17 @@ const handleSelect = (rank, memberId) => {
   setSelections(prev => {
     const currentSelections = { ...prev[currentQuestion] };
     
-    if (memberId === null) {
-    
-      delete currentSelections[rank];
+   if (memberId === null) {
+      if (Object.keys(currentSelections).length > 3) {
+        delete currentSelections[rank];
+      }
     } else {
-   
+      
+      if (Object.keys(currentSelections).length >= 3) {
+       
+        const firstRank = Object.keys(currentSelections)[0];
+        delete currentSelections[firstRank];
+      }
       currentSelections[rank] = memberId;
     }
     
@@ -680,7 +686,7 @@ const proceedToNextQuestion = async (isPartial = false) => {
         <>
           <Text style={styles.confirmButtonText}>
             {(!timerCompleted && timeRemaining > 0) 
-              ? `Wait ${timeRemaining}s` 
+              ? `Wait ${timeRemaining}s for next question` 
               : currentQuestion < shuffledQuestions.length - 1 
                 ? 'Confirm & Next' 
                 : 'Submit Survey'}
