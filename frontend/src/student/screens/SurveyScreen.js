@@ -6,134 +6,136 @@ import auth from '../services/auth';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import HamburgerHeader from '../components/HamburgerHeader';
+import MemberCard from '../components/MemberCard';
+// const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
+//   const getRankForMember = () => {
+//     for (const [rank, memberId] of Object.entries(currentRankings)) {
+//       if (memberId === member.id) {
+//         return parseInt(rank);
+//       }
+//     }
+//     return null;
+//   };
 
-const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
-  const getRankForMember = () => {
-    for (const [rank, memberId] of Object.entries(currentRankings)) {
-      if (memberId === member.id) {
-        return parseInt(rank);
-      }
-    }
-    return null;
-  };
+//   const currentRank = getRankForMember();
+//   const isSelected = currentRank !== null;
 
-  const currentRank = getRankForMember();
-  const isSelected = currentRank !== null;
+//   const getRankColor = (rank) => {
+//     switch(rank) {
+//       case 1: return ['#FFD700', '#FFA000']; // Gold gradient
+//       case 2: return ['#E0E0E0', '#BDBDBD']; // Silver gradient
+//       case 3: return ['#CD7F32', '#A0522D']; // Bronze gradient
+//       default: return ['#4F46E5', '#7C3AED'];
+//     }
+//   };
 
-  const getRankColor = (rank) => {
-    switch(rank) {
-      case 1: return ['#FFD700', '#FFA000']; // Gold gradient
-      case 2: return ['#E0E0E0', '#BDBDBD']; // Silver gradient
-      case 3: return ['#CD7F32', '#A0522D']; // Bronze gradient
-      default: return ['#4F46E5', '#7C3AED'];
-    }
-  };
+//   const getRankLabel = (rank) => {
+//     switch(rank) {
+//       case 1: return '🥇 1st Place';
+//       case 2: return '🥈 2nd Place'; 
+//       case 3: return '🥉 3rd Place';
+//       default: return `Rank ${rank}`;
+//     }
+//   };
 
-  const getRankLabel = (rank) => {
-    switch(rank) {
-      case 1: return '🥇 1st Place';
-      case 2: return '🥈 2nd Place'; 
-      case 3: return '🥉 3rd Place';
-      default: return `Rank ${rank}`;
-    }
-  };
-
-  return (
-    <View style={styles.memberCardContainer}>
-      <View style={[styles.memberCard, isSelected && styles.selectedCard]}>
-        {/* Member Info Section */}
-        <View style={styles.memberInfoContainer}>
-          <View style={styles.profileImageContainer}>
-            {member.profileImage ? (
-              <Image
-                source={{ uri: member.profileImage }}
-                style={styles.profileImage}
-                onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
-              />
-            ) : (
-              <LinearGradient
-                colors={['#4F46E5', '#7C3AED']}
-                style={styles.profileImageGradient}
-              >
-                <Icon name="person" size={20} color="#fff" />
-              </LinearGradient>
-            )}
-          </View>
-          <View style={styles.memberInfo}>
-            <Text style={styles.memberName}>{member.name}</Text>
-            <Text style={styles.memberEmail}>{member.email}</Text>
-            {member.department && (
-              <View style={styles.departmentContainer}>
-                <Icon name="domain" size={12} color="#64748B" />
-                <Text style={styles.memberDepartment}>{member.department}</Text>
-              </View>
-            )}
-          </View>
-        </View>
+//   return (
+//     <View style={styles.memberCardContainer}>
+//       <View style={[styles.memberCard, isSelected && styles.selectedCard]}>
+//         {/* Member Info Section */}
+//         <View style={styles.memberInfoContainer}>
+//           <View style={styles.profileImageContainer}>
+//             {member.profileImage ? (
+//               <Image
+//                 source={{ uri: member.profileImage }}
+//                 style={styles.profileImage}
+//                 onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
+//               />
+//             ) : (
+//               <LinearGradient
+//                 colors={['#4F46E5', '#7C3AED']}
+//                 style={styles.profileImageGradient}
+//               >
+//                 <Icon name="person" size={20} color="#fff" />
+//               </LinearGradient>
+//             )}
+//           </View>
+//           <View style={styles.memberInfo}>
+//             <Text style={styles.memberName}>{member.name}</Text>
+//             <Text style={styles.memberEmail}>{member.email}</Text>
+//             {member.department && (
+//               <View style={styles.departmentContainer}>
+//                 <Icon name="domain" size={12} color="#64748B" />
+//                 <Text style={styles.memberDepartment}>{member.department}</Text>
+//               </View>
+//             )}
+//           </View>
+//         </View>
         
-        {/* Selection Status */}
-        {isSelected ? (
-          <View style={styles.selectedRankContainer}>
-            <LinearGradient
-              colors={getRankColor(currentRank)}
-              style={styles.rankBadge}
-            >
-              <Text style={styles.rankBadgeText}>{getRankLabel(currentRank)}</Text>
-            </LinearGradient>
-            <TouchableOpacity
-              style={styles.removeButtonContainer}
-              onPress={() => onSelect(currentRank, null)}
-            >
-              {/* <LinearGradient
-                colors={['#EF4444', '#DC2626']}
-                style={styles.removeButton}
-              >
-                <Icon name="close" size={16} color="#fff" />
-                <Text style={styles.removeButtonText}>Remove</Text>
-              </LinearGradient> */}
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.rankingButtons}>
-            {[1, 2, 3].map(rank => {
-              const isRankTaken = Object.values(currentRankings).includes(member.id) || currentRankings[rank];
-              return (
-                <TouchableOpacity
-                  key={rank}
-                  style={styles.rankButtonContainer}
-                  onPress={() => !isRankTaken && onSelect(rank, member.id)}
-                  disabled={!!isRankTaken}
-                  activeOpacity={0.8}
-                >
-                  <LinearGradient
-                    colors={isRankTaken 
-                      ? ['#6B7280', '#4B5563'] 
-                      : getRankColor(rank)}
-                    style={[styles.rankButton, isRankTaken && styles.disabledRankButton]}
-                  >
-                    <Text style={[styles.rankButtonEmoji, isRankTaken && styles.disabledText]}>
-                      {rank === 1 && '🥇'}
-                      {rank === 2 && '🥈'}
-                      {rank === 3 && '🥉'}
-                    </Text>
-                    <Text style={[styles.rankButtonLabel, isRankTaken && styles.disabledText]}>
-                      {rank === 1 ? '1st' : rank === 2 ? '2nd' : '3rd'}
-                    </Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
+//         {/* Selection Status */}
+//         {isSelected ? (
+//           <View style={styles.selectedRankContainer}>
+//             <LinearGradient
+//               colors={getRankColor(currentRank)}
+//               style={styles.rankBadge}
+//             >
+//               <Text style={styles.rankBadgeText}>{getRankLabel(currentRank)}</Text>
+//             </LinearGradient>
+//             <TouchableOpacity
+//               style={styles.removeButtonContainer}
+//               onPress={() => onSelect(currentRank, null)}
+//             >
+//               <LinearGradient
+//                 colors={['#EF4444', '#DC2626']}
+//                 style={styles.removeButton}
+//               >
+//                 <Icon name="close" size={16} color="#fff" />
+//                 <Text style={styles.removeButtonText}>Remove</Text>
+//               </LinearGradient>
+//             </TouchableOpacity>
+//           </View>
+//         ) : (
+//           <View style={styles.rankingButtons}>
+//   {[1, 2, 3].map(rank => {
+//     // Only disable if this specific rank is taken by someone ELSE (not this member)
+//     const isRankTakenByOther = currentRankings[rank] && currentRankings[rank] !== member.id;
+    
+//     return (
+//       <TouchableOpacity
+//         key={rank}
+//         style={styles.rankButtonContainer}
+//         onPress={() => onSelect(rank, member.id)}
+//         disabled={isRankTakenByOther}
+//         activeOpacity={0.8}
+//       >
+//         <LinearGradient
+//           colors={isRankTakenByOther 
+//             ? ['#6B7280', '#4B5563'] 
+//             : getRankColor(rank)}
+//           style={[styles.rankButton, isRankTakenByOther && styles.disabledRankButton]}
+//         >
+//           <Text style={[styles.rankButtonEmoji, isRankTakenByOther && styles.disabledText]}>
+//             {rank === 1 && '🥇'}
+//             {rank === 2 && '🥈'}
+//             {rank === 3 && '🥉'}
+//           </Text>
+//           <Text style={[styles.rankButtonLabel, isRankTakenByOther && styles.disabledText]}>
+//             {rank === 1 ? '1st' : rank === 2 ? '2nd' : '3rd'}
+//           </Text>
+//         </LinearGradient>
+//       </TouchableOpacity>
+//     );
+//   })}
+// </View>
+//         )}
 
-        {/* Selection Glow Effect */}
-        {isSelected && (
-          <View style={styles.selectionGlow} />
-        )}
-      </View>
-    </View>
-  );
-};
+//         {/* Selection Glow Effect */}
+//         {isSelected && (
+//           <View style={styles.selectionGlow} />
+//         )}
+//       </View>
+//     </View>
+//   );
+// };
 
 const seededShuffle = (array, seed) => {
   const shuffled = [...array];
@@ -402,17 +404,29 @@ const handleSelect = (rank, memberId) => {
   setSelections(prev => {
     const currentSelections = { ...prev[currentQuestion] };
     
-   if (memberId === null) {
-      if (Object.keys(currentSelections).length > 3) {
+    // Handle removal case (when memberId is null)
+    if (memberId === null) {
+      // Remove this specific rank
+      delete currentSelections[rank];
+    } else {
+      // Handle selection case
+      
+      // First, check if this member is already ranked in a different position
+      const existingRank = Object.entries(currentSelections).find(
+        ([r, id]) => id === memberId
+      );
+      
+      // If member is already ranked elsewhere, remove that ranking
+      if (existingRank) {
+        delete currentSelections[existingRank[0]];
+      }
+      
+      // Also check if this rank is already assigned to someone else
+      if (currentSelections[rank]) {
         delete currentSelections[rank];
       }
-    } else {
       
-      if (Object.keys(currentSelections).length >= 3) {
-       
-        const firstRank = Object.keys(currentSelections)[0];
-        delete currentSelections[firstRank];
-      }
+      // Add the new ranking
       currentSelections[rank] = memberId;
     }
     
@@ -1011,10 +1025,12 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginLeft: 4,
   },
-  selectedRankContainer: {
-    alignItems: 'center',
-    gap: 12,
-  },
+selectedRankContainer: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: 12,
+},
   rankBadge: {
     paddingHorizontal: 20,
     paddingVertical: 10,
@@ -1032,20 +1048,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   removeButtonContainer: {
-    borderRadius: 20,
-    overflow: 'hidden',
+    marginLeft: 8,
   },
   removeButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 4,
   },
   removeButtonText: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    marginLeft: 6,
   },
   rankingButtons: {
     flexDirection: 'row',

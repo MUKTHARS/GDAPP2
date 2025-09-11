@@ -4,9 +4,10 @@ package controllers
 import (
 	"database/sql"
 	"encoding/json"
-	"net/http"
-	"log"
 	"gd/database"
+	"log"
+	"net/http"
+	"strings"
 )
 
 type StudentProfile struct {
@@ -81,7 +82,12 @@ func GetStudentProfile(w http.ResponseWriter, r *http.Request) {
 
 	photoURL := ""
 	if profile.PhotoURL.Valid {
-		photoURL = profile.PhotoURL.String
+		
+		if strings.HasPrefix(profile.PhotoURL.String, "http") {
+			photoURL = profile.PhotoURL.String
+		} else {
+			photoURL = "http://" + r.Host + "/uploads/" + profile.PhotoURL.String
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

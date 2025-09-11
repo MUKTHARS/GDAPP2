@@ -8,7 +8,7 @@ export default {
                 email: email.trim().toLowerCase(), 
                 password 
             });
-            
+            console.log(response)
             if (!response.data?.token) {
                 throw new Error('Authentication failed - no token received');
             }

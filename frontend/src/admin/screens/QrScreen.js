@@ -320,7 +320,7 @@ const storeQR = async (qrData, expiry, qrId, isFull = false) => {
               size={250}
               color="black"
               backgroundColor="white"
-              logo={require('../assets/images/logo.png')}
+              // logo={require('../assets/images/logo.png')}
               logoSize={40}
               logoMargin={2}
               logoBorderRadius={8}

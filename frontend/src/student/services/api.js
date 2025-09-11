@@ -4,8 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from './auth';
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.150.254.159:8080' 
-    : 'http://10.150.254.159:8080',
+      ? 'https://learnathon.bitsathy.ac.in/api/gd' 
+    : 'https://learnathon.bitsathy.ac.in/api/gd',
 });
 
 api.interceptors.request.use(async (config) => {
@@ -201,6 +201,53 @@ api.student = {
     console.error('Participants API error:', error);
     return { data: [] };
   }),
+
+checkLevelProgression: (sessionId) => {
+  return api.get('/student/level-progression', {
+    params: { session_id: sessionId },
+    validateStatus: function (status) {
+      return status < 500;
+    },
+    transformResponse: [
+      function (data) {
+        try {
+          const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+          return {
+            promoted: parsed.promoted || false,
+            old_level: parsed.old_level || 1,
+            new_level: parsed.new_level || 1,
+            rank: parsed.rank || 0,
+            session_id: parsed.session_id || sessionId,
+            student_id: parsed.student_id || ''
+          };
+        } catch (e) {
+          console.error('Level progression parsing error:', e);
+          return {
+            promoted: false,
+            old_level: 1,
+            new_level: 1,
+            rank: 0,
+            session_id: sessionId,
+            student_id: ''
+          };
+        }
+      }
+    ]
+  }).catch(error => {
+    console.error('Level progression API error:', error);
+    return {
+      data: {
+        promoted: false,
+        old_level: 1,
+        new_level: 1,
+        rank: 0,
+        session_id: sessionId,
+        student_id: ''
+      }
+    };
+  });
+},
+
  getUserBookings: () => {
         return api.get('/student/bookings/my', {
             validateStatus: function (status) {
@@ -392,11 +439,23 @@ getResults: (sessionId) => {
     };
   });
 },
-submitFeedback: (sessionId, rating, comments) => api.post('/student/feedback', {
+submitFeedback: (sessionId, rating, comments) => {
+  return api.post('/student/feedback', {
     session_id: sessionId,
     rating: rating,
     comments: comments
-}),
+  }).then(response => {
+    // Add navigation after successful feedback submission
+    if (response.status === 200 || response.data.status === 'success') {
+      // Use a small timeout to ensure the response is processed first
+      setTimeout(() => {
+        // Navigate to home screen
+        navigation.navigate('SessionBooking'); // Or whatever your home screen route is called
+      }, 100);
+    }
+    return response;
+  });
+},
 getFeedback: (sessionId) => api.get('/student/feedback/get', {
     params: { session_id: sessionId },
     validateStatus: function (status) {

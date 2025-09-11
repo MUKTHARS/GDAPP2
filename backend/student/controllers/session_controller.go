@@ -277,7 +277,7 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set default values
-	agenda.PrepTime = 5
+	agenda.PrepTime = 1
 	agenda.Discussion = 1
 	agenda.Survey = 1
 
@@ -2233,7 +2233,7 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
         WHERE sp.session_id = ? 
           AND sp.is_dummy = FALSE
           AND su.is_active = TRUE
-          AND spt.start_time > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+          AND spt.start_time > DATE_SUB(NOW(), INTERVAL 12 HOUR)
         ORDER BY su.full_name`,
 		sessionID)
 
@@ -2303,7 +2303,7 @@ func CheckSurveyCompletion(w http.ResponseWriter, r *http.Request) {
                                       AND sp.student_id = spt.student_id
         WHERE sp.session_id = ? 
           AND sp.is_dummy = FALSE
-          AND spt.start_time > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
+          AND spt.start_time > DATE_SUB(NOW(), INTERVAL 12 HOUR)`,
 		sessionID).Scan(&totalParticipants)
 
 	if err != nil {

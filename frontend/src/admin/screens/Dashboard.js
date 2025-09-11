@@ -5,6 +5,7 @@ import QRCode from 'react-native-qrcode-svg';
 import api from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
+import DatePicker from 'react-native-date-picker';
 
 export default function Dashboard({ navigation }) {
   const [startDateTime, setStartDateTime] = useState(new Date());
@@ -33,7 +34,22 @@ export default function Dashboard({ navigation }) {
     { title: 'Analytics', screen: 'Analytics' },
     { title: 'Bulk Sesison', screen: 'Bulk Session' },
   ];
-
+const parseTimeString = (timeStr) => {
+  // Example: "11:30 AM" or "2:45 PM"
+  const [time, period] = timeStr.split(' ');
+  const [hoursStr, minutesStr] = time.split(':');
+  
+  let hours = parseInt(hoursStr);
+  const minutes = parseInt(minutesStr);
+  
+  if (period === 'PM' && hours !== 12) {
+    hours += 12;
+  } else if (period === 'AM' && hours === 12) {
+    hours = 0;
+  }
+  
+  return { hours, minutes };
+};
   useEffect(() => {
     const fetchVenues = async () => {
       try {
@@ -125,31 +141,39 @@ export default function Dashboard({ navigation }) {
     }
   };
 
-  const handleUpdateVenue = async () => {
-    try {
-      const updatedVenue = {
-        name: venueName,
-        capacity: parseInt(venueCapacity),
-        level: parseInt(venueLevel),
-      };
+const handleUpdateVenue = async () => {
+  try {
+    // Format the session timing correctly for the backend
+    const formattedSessionTiming = `${formatDate(startDateTime)} | ${formatTime(startDateTime)} - ${formatTime(endDateTime)}`;
 
-      await api.put(`/admin/venues/${editingVenue.id}`, updatedVenue, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await AsyncStorage.getItem('token')}`
-        }
-      });
+    const updatedVenue = {
+      name: venueName,
+      capacity: parseInt(venueCapacity),
+      level: parseInt(venueLevel),
+      session_timing: formattedSessionTiming, // Add this field
+      table_details: editingVenue?.table_details || '' // Add this field
+    };
 
-      // Refresh the venues list
-      const response = await api.get('/admin/venues');
-      setVenues(response.data);
+    await api.put(`/admin/venues/${editingVenue.id}`, updatedVenue, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${await AsyncStorage.getItem('token')}`
+      }
+    });
 
-      // Close the modal
-      setEditingVenue(null);
-    } catch (error) {
-      console.error('Error updating venue:', error);
-    }
-  };
+    // Refresh the venues list
+    const response = await api.get('/admin/venues');
+    setVenues(response.data);
+
+    // Close the modal
+    setEditingVenue(null);
+  } catch (error) {
+    console.error('Error updating venue:', error);
+    // Add error handling for better UX
+    Alert.alert('Error', 'Failed to update venue. Please check all fields and try again.');
+  }
+};
+
   return (
     <ScrollView style={styles.container}>
 
@@ -211,7 +235,7 @@ export default function Dashboard({ navigation }) {
               />
             </View>
 
-            {showDatePicker && (
+            {/* {showDatePicker && (
               <DateTimePicker
                 value={startDateTime}
                 mode="date"
@@ -219,28 +243,44 @@ export default function Dashboard({ navigation }) {
                 onChange={handleDateChange}
                 minimumDate={new Date()}
               />
-            )}
+            )} */}
 
-            {showStartTimePicker && (
-              <DateTimePicker
-                value={startDateTime}
-                mode="time"
-                is24Hour={false}
-                display="default"
-                onChange={handleStartTimeChange}
-              />
-            )}
+            {/* Date & Time Picker for Start */}
+{showStartTimePicker && (
+  <DatePicker
+    modal
+    open={showStartTimePicker}
+    date={startDateTime}
+    mode="datetime"
+    minimumDate={new Date()}
+    onConfirm={(date) => {
+      setShowStartTimePicker(false);
+      setStartDateTime(date);
+      if (endDateTime <= date) {
+        const newEndDate = new Date(date);
+        newEndDate.setHours(newEndDate.getHours() + 1);
+        setEndDateTime(newEndDate);
+      }
+    }}
+    onCancel={() => setShowStartTimePicker(false)}
+  />
+)}
 
-            {showEndTimePicker && (
-              <DateTimePicker
-                value={endDateTime}
-                mode="time"
-                is24Hour={false}
-                display="default"
-                onChange={handleEndTimeChange}
-                minimumDate={startDateTime}
-              />
-            )}
+{/* Date & Time Picker for End */}
+{showEndTimePicker && (
+  <DatePicker
+    modal
+    open={showEndTimePicker}
+    date={endDateTime}
+    mode="datetime"
+    minimumDate={startDateTime}
+    onConfirm={(date) => {
+      setShowEndTimePicker(false);
+      setEndDateTime(date);
+    }}
+    onCancel={() => setShowEndTimePicker(false)}
+  />
+)}
 
             <TextInput
               style={styles.input}
@@ -317,13 +357,37 @@ export default function Dashboard({ navigation }) {
           </View>
 
           <View style={styles.venueActions}>
-            <TouchableOpacity
-              onPress={() => {
-                setEditingVenue(venue);
-                setVenueName(venue.name);
-                setVenueCapacity(venue.capacity.toString());
-              }}
-            >
+<TouchableOpacity
+  onPress={() => {
+    setEditingVenue(venue);
+    setVenueName(venue.name);
+    setVenueCapacity(venue.capacity.toString());
+    setVenueLevel(venue.level.toString());
+    
+    // Parse existing session timing if available
+    if (venue.session_timing) {
+      const [datePart, timeRange] = venue.session_timing.split(' | ');
+      if (datePart && timeRange) {
+        // Parse date from datePart (DD/MM/YYYY)
+        const [day, month, year] = datePart.split('/').map(Number);
+        
+        // Parse time range (HH:MM AM/PM - HH:MM AM/PM)
+        const [startTimeStr, endTimeStr] = timeRange.split(' - ');
+        
+        // Parse start time
+        const startTime = parseTimeString(startTimeStr);
+        const startDate = new Date(year, month - 1, day, startTime.hours, startTime.minutes);
+        
+        // Parse end time  
+        const endTime = parseTimeString(endTimeStr);
+        const endDate = new Date(year, month - 1, day, endTime.hours, endTime.minutes);
+        
+        setStartDateTime(startDate);
+        setEndDateTime(endDate);
+      }
+    }
+  }}
+>
               <Icon name="edit" size={24} color="#555" />
             </TouchableOpacity>
 

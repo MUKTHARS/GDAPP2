@@ -45,7 +45,7 @@ export default function LoginScreen({ navigation }) {
               colors={['#4F46E5', '#7C3AED']}
               style={styles.logoGradient}
             >
-              <Icon name="school" size={32} color="#fff" />
+              <Icon name="school" size={52} color="#fff" />
             </LinearGradient>
           </View>
           <Text style={styles.title}>Student Login</Text>
@@ -136,8 +136,8 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   logoGradient: {
-    width: 56,
-    height: 56,
+    width: 86,
+    height: 86,
     justifyContent: 'center',
     alignItems: 'center',
   },

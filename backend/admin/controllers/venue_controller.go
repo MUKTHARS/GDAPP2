@@ -15,6 +15,20 @@ import (
 
 	"github.com/google/uuid"
 )
+type Venue struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Capacity  int    `json:"capacity"`
+	Level     int    `json:"level"`
+	QRSecret  string `json:"qr_secret"`
+	IsActive  bool   `json:"is_active"`
+	CreatedBy string `json:"created_by"`
+	SessionTiming string `json:"session_timing"`
+	AvailableDays string `json:"available_days"`
+	StartTime string `json:"start_time"`
+	EndTime   string `json:"end_time"`
+	TableDetails  string `json:"table_details"`
+}
 
 // var db *sql.DB // Make sure this is properly initialized in main.go
 // func SetDB(database *sql.DB) {
@@ -54,60 +68,63 @@ func GetVenues(w http.ResponseWriter, r *http.Request) {
 }
 
 func UpdateVenue(w http.ResponseWriter, r *http.Request) {
-    db := database.GetDB()
-    if db == nil {
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Database connection error"})
-        return
-    }
-
-    // Extract ID from URL path if present
-    var venueID string
-    if strings.HasPrefix(r.URL.Path, "/admin/venues/") && len(r.URL.Path) > 13 {
-        venueID = strings.TrimPrefix(r.URL.Path, "/admin/venues/")
-    }
-
-    // Parse the request body
-    var requestBody struct {
-        ID       string `json:"id"`
-        Name     string `json:"name"`
-        Capacity int    `json:"capacity"`
-        Level    int    `json:"level"`
-        SessionTiming string `json:"session_timing"`
-        TableDetails  string `json:"table_details"`
-    }
-    
-    if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+    var venue Venue
+    if err := json.NewDecoder(r.Body).Decode(&venue); err != nil {
         w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request data"})
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request"})
         return
     }
 
-    // Use ID from URL if not in request body
-    if requestBody.ID == "" && venueID != "" {
-        requestBody.ID = venueID
-    }
-
-    if requestBody.ID == "" {
+    // Validate required fields
+    if venue.ID == "" || venue.Name == "" || venue.Capacity <= 0 {
         w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Venue ID is required"})
+        json.NewEncoder(w).Encode(map[string]string{"error": "Missing required fields"})
         return
     }
 
-    _, err := db.Exec(
-    `UPDATE venues 
-    SET name = ?, capacity = ?, level = ?, session_timing = ?, table_details = ?
-    WHERE id = ? AND is_active = TRUE`,
-    requestBody.Name, requestBody.Capacity, requestBody.Level, requestBody.SessionTiming, requestBody.TableDetails, requestBody.ID)
-    
+    // Parse and validate session timing format
+    if venue.SessionTiming != "" {
+        parts := strings.Split(venue.SessionTiming, " | ")
+        if len(parts) != 2 {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Invalid session timing format. Use: DD/MM/YYYY | HH:MM AM/PM - HH:MM AM/PM"})
+            return
+        }
+        
+        datePart := parts[0]
+        timePart := parts[1]
+        
+        // Validate date format
+        dateParts := strings.Split(datePart, "/")
+        if len(dateParts) != 3 {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Invalid date format. Use: DD/MM/YYYY"})
+            return
+        }
+        
+        // Validate time range format
+        if !strings.Contains(timePart, " - ") {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Invalid time range format. Use: HH:MM AM/PM - HH:MM AM/PM"})
+            return
+        }
+    }
+
+    _, err := database.GetDB().Exec(`
+        UPDATE venues 
+        SET name = ?, capacity = ?, level = ?, session_timing = ?, table_details = ?
+        WHERE id = ?`,
+        venue.Name, venue.Capacity, venue.Level, venue.SessionTiming, venue.TableDetails, venue.ID)
+
     if err != nil {
+        log.Printf("Error updating venue: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update venue"})
         return
     }
 
     w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]string{"message": "Venue updated successfully"})
+    json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
 }
 
 func CreateVenue(w http.ResponseWriter, r *http.Request) {

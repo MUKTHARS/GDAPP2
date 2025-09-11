@@ -4,8 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.150.254.159:8080' 
-    : 'http://10.150.254.159:8080',
+  ? 'https://learnathon.bitsathy.ac.in/api/gd' 
+    : 'https://learnathon.bitsathy.ac.in/api/gd',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -13,10 +13,13 @@ const api = axios.create({
 });
 
 api.interceptors.request.use(async (config) => {
-  const token = await AsyncStorage.getItem('token');
-  
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  try {
+    const token = await AsyncStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  } catch (error) {
+    console.error('Error getting token from storage:', error);
   }
   return config;
 }, error => {
@@ -37,7 +40,11 @@ api.admin = {
     },
     timeout: 15000
   }),
-  updateVenue: (id, data) => api.put(`/admin/venues/${id}`, data),
+ updateVenue: (id, data) => api.put(`/admin/venues/${id}`, data, {
+  headers: {
+    'Content-Type': 'application/json'
+  }
+}),
   createVenue: (data) => api.post('/admin/venues', data),
   getBookings: () => api.get('/admin/bookings', {
     validateStatus: function (status) {

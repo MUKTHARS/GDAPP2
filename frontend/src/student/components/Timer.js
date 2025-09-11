@@ -6,6 +6,7 @@ const Timer = ({ duration, onComplete, active = true, initialTimeRemaining, onTi
   const [endTime, setEndTime] = useState(null);
   const appState = useRef(AppState.currentState);
   const timerRef = useRef(null);
+  const lastUpdateTime = useRef(Date.now()); // Add this ref to track last update time
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -31,6 +32,7 @@ const Timer = ({ duration, onComplete, active = true, initialTimeRemaining, onTi
           const newRemaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
           setRemaining(newRemaining);
           if (onTick) onTick(newRemaining);
+          lastUpdateTime.current = Date.now(); // Reset last update time
           
           if (newRemaining <= 0) {
             onComplete();
@@ -49,19 +51,31 @@ const Timer = ({ duration, onComplete, active = true, initialTimeRemaining, onTi
     if (!active || remaining <= 0 || !endTime) return;
 
     const updateTimer = () => {
-      const newRemaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+      const now = Date.now();
+      const timeSinceLastUpdate = now - lastUpdateTime.current;
       
-      setRemaining(newRemaining);
-      if (onTick) onTick(newRemaining);
-      
-      if (newRemaining <= 0) {
-        onComplete();
+      // Only update if at least 900ms have passed (to avoid double updates)
+      if (timeSinceLastUpdate >= 900) {
+        const newRemaining = Math.max(0, Math.floor((endTime - now) / 1000));
+        
+        setRemaining(newRemaining);
+        if (onTick) onTick(newRemaining);
+        lastUpdateTime.current = now; // Update last update time
+        
+        if (newRemaining <= 0) {
+          onComplete();
+        } else {
+          // Calculate exact delay for next update to maintain 1-second intervals
+          const nextUpdateDelay = 1000 - (timeSinceLastUpdate % 1000);
+          timerRef.current = setTimeout(updateTimer, nextUpdateDelay);
+        }
       } else {
-        // Schedule next update (but less frequently to save battery)
-        timerRef.current = setTimeout(updateTimer, 1000);
+        // If not enough time has passed, schedule check again soon
+        timerRef.current = setTimeout(updateTimer, 100 - timeSinceLastUpdate);
       }
     };
 
+    lastUpdateTime.current = Date.now(); // Initialize last update time
     timerRef.current = setTimeout(updateTimer, 1000);
 
     return () => {
@@ -80,7 +94,7 @@ const Timer = ({ duration, onComplete, active = true, initialTimeRemaining, onTi
       {minutes}:{seconds < 10 ? `0${seconds}` : seconds}
     </Text>
   );
-};
+}; 
 
 const styles = StyleSheet.create({
   timerText: {
