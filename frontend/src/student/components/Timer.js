@@ -6,7 +6,6 @@ const Timer = ({ duration, onComplete, active = true, initialTimeRemaining, onTi
   const [endTime, setEndTime] = useState(null);
   const appState = useRef(AppState.currentState);
   const timerRef = useRef(null);
-  const lastUpdateTime = useRef(Date.now()); // Add this ref to track last update time
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -32,7 +31,6 @@ const Timer = ({ duration, onComplete, active = true, initialTimeRemaining, onTi
           const newRemaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
           setRemaining(newRemaining);
           if (onTick) onTick(newRemaining);
-          lastUpdateTime.current = Date.now(); // Reset last update time
           
           if (newRemaining <= 0) {
             onComplete();
@@ -47,43 +45,24 @@ const Timer = ({ duration, onComplete, active = true, initialTimeRemaining, onTi
     };
   }, [endTime, onComplete, onTick]);
 
-  useEffect(() => {
-    if (!active || remaining <= 0 || !endTime) return;
+useEffect(() => {
+  if (!active || remaining <= 0 || !endTime) return;
 
-    const updateTimer = () => {
-      const now = Date.now();
-      const timeSinceLastUpdate = now - lastUpdateTime.current;
-      
-      // Only update if at least 900ms have passed (to avoid double updates)
-      if (timeSinceLastUpdate >= 900) {
-        const newRemaining = Math.max(0, Math.floor((endTime - now) / 1000));
-        
-        setRemaining(newRemaining);
-        if (onTick) onTick(newRemaining);
-        lastUpdateTime.current = now; // Update last update time
-        
-        if (newRemaining <= 0) {
-          onComplete();
-        } else {
-          // Calculate exact delay for next update to maintain 1-second intervals
-          const nextUpdateDelay = 1000 - (timeSinceLastUpdate % 1000);
-          timerRef.current = setTimeout(updateTimer, nextUpdateDelay);
-        }
-      } else {
-        // If not enough time has passed, schedule check again soon
-        timerRef.current = setTimeout(updateTimer, 100 - timeSinceLastUpdate);
-      }
-    };
+  timerRef.current = setInterval(() => {
+    const newRemaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
+    setRemaining(newRemaining);
+    if (onTick) onTick(newRemaining);
 
-    lastUpdateTime.current = Date.now(); // Initialize last update time
-    timerRef.current = setTimeout(updateTimer, 1000);
+    if (newRemaining <= 0) {
+      clearInterval(timerRef.current);
+      onComplete();
+    }
+  }, 1000);
 
-    return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-    };
-  }, [active, endTime, onComplete, onTick]);
+  return () => {
+    clearInterval(timerRef.current);
+  };
+}, [active, endTime, onComplete, onTick]);
 
   // Convert seconds to minutes:seconds format
   const minutes = Math.floor(remaining / 60);
@@ -94,7 +73,7 @@ const Timer = ({ duration, onComplete, active = true, initialTimeRemaining, onTi
       {minutes}:{seconds < 10 ? `0${seconds}` : seconds}
     </Text>
   );
-}; 
+};
 
 const styles = StyleSheet.create({
   timerText: {
