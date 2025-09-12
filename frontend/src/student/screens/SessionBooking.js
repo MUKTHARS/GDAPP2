@@ -91,15 +91,20 @@ const fetchVenues = async (lvl) => {
       const processedVenues = response.data.map(venue => {
         let isExpired = false;
         
-        // Check if venue has an active session and if it's expired
-        if (venue.has_active_session && venue.end_time) {
-          const endTime = new Date(venue.end_time);
-          const now = new Date();
-          
-          // Add timezone offset handling if needed
-          isExpired = endTime <= now;
-          
-          console.log(`Venue ${venue.venue_name}: EndTime=${venue.end_time}, Now=${now.toISOString()}, IsExpired=${isExpired}`);
+        // Check if venue has an end time and if it's expired
+        if (venue.end_time) {
+          try {
+            const endTime = new Date(venue.end_time);
+            const now = new Date();
+            
+            // Handle timezone issues by comparing timestamps
+            isExpired = endTime.getTime() <= now.getTime();
+            
+            console.log(`Venue ${venue.venue_name}: EndTime=${endTime.toISOString()}, Now=${now.toISOString()}, IsExpired=${isExpired}`);
+          } catch (error) {
+            console.error('Error parsing end time:', error);
+            isExpired = false; // Default to not expired if parsing fails
+          }
         }
         
         return {
@@ -161,51 +166,75 @@ const fetchVenues = async (lvl) => {
     }
   };
 
-  const handleBookVenue = async () => {
-    // Prevent booking expired venues
-    if (selectedVenue.is_expired) {
-      Alert.alert('Booking Failed', 'This session has expired and cannot be booked');
+const handleBookVenue = async () => {
+  // Prevent booking expired venues
+  if (selectedVenue.is_expired) {
+    Alert.alert('Booking Failed', 'This session has expired and cannot be booked');
+    return;
+  }
+
+  try {
+    setLoading(true);
+    const authData = await auth.getAuthData();
+    const studentLevel = parseInt(authData.level || 1);
+    
+    if (studentLevel !== selectedVenue.level) {
+      Alert.alert(
+        'Booking Failed',
+        `You can only book venues for your current level (Level ${studentLevel})`
+      );
       return;
     }
-
+    
+    // Check if student already has an active booking at this level
     try {
-      setLoading(true);
-      const authData = await auth.getAuthData();
-      const studentLevel = parseInt(authData.level || 1);
+      const existingBookingsResponse = await api.student.getUserBookings();
+      const activeBookings = existingBookingsResponse.data || [];
       
-      if (studentLevel !== selectedVenue.level) {
+      // Check if there's any active booking at the same level
+      const hasActiveBookingAtLevel = activeBookings.some(booking => {
+        return booking.level === selectedVenue.level && 
+               booking.status !== 'completed' && 
+               booking.status !== 'cancelled';
+      });
+      
+      if (hasActiveBookingAtLevel) {
         Alert.alert(
           'Booking Failed',
-          `You can only book venues for your current level (Level ${studentLevel})`
+          `You already have an active booking for Level ${selectedVenue.level}. Complete or cancel it before booking another venue at this level.`
         );
         return;
       }
-      
-      const response = await api.student.bookVenue(selectedVenue.id);
-      
-      setBookedVenues([...bookedVenues, selectedVenue.id]);
-      Alert.alert(
-        'Booking Successful',
-        `You have successfully booked ${selectedVenue.venue_name}`,
-        [{ text: 'OK', onPress: () => {
-          fetchVenues(level);
-          setIsModalVisible(false);
-        }}]
-      );
-    } catch (error) {
-      let errorMessage = 'Failed to book venue';
-      if (error.response?.status === 409) {
-        errorMessage = 'You have already booked this venue';
-      } else if (error.response?.status === 403) {
-        errorMessage = 'You can only have one active booking at a time';
-      } else if (error.response?.status === 410) {
-        errorMessage = 'This session has expired and cannot be booked';
-      }
-      Alert.alert('Booking Failed', errorMessage);
-    } finally {
-      setLoading(false);
+    } catch (bookingCheckError) {
+      console.log('Could not check existing bookings, proceeding with booking attempt');
+      // Continue with booking if we can't check existing bookings
     }
-  };
+    
+    const response = await api.student.bookVenue(selectedVenue.id);
+    
+    setBookedVenues([...bookedVenues, selectedVenue.id]);
+    Alert.alert(
+      'Booking Successful',
+      `You have successfully booked ${selectedVenue.venue_name}`,
+      [{ text: 'OK', onPress: () => {
+        fetchVenues(level);
+        setIsModalVisible(false);
+      }}]
+    );
+  } catch (error) {
+    let errorMessage = 'Failed to book venue';
+    if (error.response?.status === 409) {
+      errorMessage = 'You have already booked this venue';
+    } else if (error.response?.status === 403) {
+      errorMessage = 'You can only have one active booking at a time for this level';
+    } else if (error.response?.status === 410) {
+      errorMessage = 'This session has expired and cannot be booked';
+    }
+    Alert.alert('Booking Failed', errorMessage);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleCancelBooking = async () => {
     if (cancelText.toLowerCase() !== 'cancel') {
@@ -581,7 +610,7 @@ const fetchVenues = async (lvl) => {
                       </TouchableOpacity>
                     </View>
                   ) : (
-                      <TouchableOpacity
+ <TouchableOpacity
     style={[
       styles.modalActionButton,
       styles.modalBookButton,
