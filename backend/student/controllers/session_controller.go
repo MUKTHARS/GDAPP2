@@ -1559,7 +1559,7 @@ func updateStudentLevel(sessionID string) error {
                 }
                 
                 // Track the promotion
-                err = trackStudentPromotion(sessionID, result.StudentID, i+1, result.CurrentLevel)
+                err = trackStudentPromotion(sessionID, result.StudentID, i+1, result.CurrentLevel, newLevel)
                 if err != nil {
                     log.Printf("Error tracking promotion for student %s: %v", result.StudentID, err)
                 }
@@ -1574,13 +1574,13 @@ func updateStudentLevel(sessionID string) error {
     return tx.Commit()
 }
 
-func trackStudentPromotion(sessionID, studentID string, rank int, oldLevel int) error {
+func trackStudentPromotion(sessionID, studentID string, rank int, oldLevel, newLevel int) error {
     _, err := database.GetDB().Exec(`
         INSERT INTO student_promotions 
         (id, student_id, session_id, old_level, new_level, rank, promoted_at)
-        VALUES (UUID(), ?, ?, ?, LEAST(?, 5), ?, NOW())
+        VALUES (UUID(), ?, ?, ?, ?, ?, NOW())
         ON DUPLICATE KEY UPDATE new_level = VALUES(new_level), rank = VALUES(rank)
-    `, studentID, sessionID, oldLevel, oldLevel+1, rank)
+    `, studentID, sessionID, oldLevel, newLevel, rank)
     
     return err
 }

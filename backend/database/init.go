@@ -111,6 +111,20 @@ func InitDB(db *sql.DB) error {
             FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE
         )`,
 
+`CREATE TABLE IF NOT EXISTS student_promotions (
+    id VARCHAR(36) PRIMARY KEY,
+    student_id VARCHAR(36) NOT NULL,
+    session_id VARCHAR(36) NOT NULL,
+    old_level INT NOT NULL,
+    new_level INT NOT NULL,
+    ranks INT NOT NULL,
+    promoted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_promotion (student_id, session_id),
+    FOREIGN KEY (student_id) REFERENCES student_users(id),
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id)
+)`,
+
+
         // Survey tables
         `CREATE TABLE IF NOT EXISTS survey_responses (
             id VARCHAR(36) PRIMARY KEY,

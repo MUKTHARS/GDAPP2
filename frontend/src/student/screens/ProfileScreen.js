@@ -486,17 +486,19 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   
-  sessionCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
+sessionCard: {
+  backgroundColor: '#090d13ff',
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 12,
+  borderWidth: 1,
+  borderColor: '#334155',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.3,
+  shadowRadius: 4,
+  elevation: 2,
+},
   
   sessionHeader: {
     flexDirection: 'row',
@@ -505,11 +507,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   
-  sessionVenue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
+sessionVenue: {
+  fontSize: 16,
+  fontWeight: '600',
+  color: '#F8FAFC',
+},
   
   statusBadge: {
     paddingHorizontal: 8,
@@ -517,28 +519,29 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   
-  clearedBadge: {
-    backgroundColor: '#10B98120',
-  },
-  
-  notClearedBadge: {
-    backgroundColor: '#EF444420',
-  },
-  
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
+clearedBadge: {
+  backgroundColor: 'rgba(16, 185, 129, 0.2)',
+},
+
+notClearedBadge: {
+  backgroundColor: 'rgba(239, 68, 68, 0.2)',
+},
+
+statusText: {
+  fontSize: 12,
+  fontWeight: '600',
+  color: '#F8FAFC',
+},
   
   sessionDetails: {
     marginBottom: 12,
   },
   
-  sessionTime: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
+ sessionTime: {
+  fontSize: 14,
+  color: '#94A3B8',
+  marginBottom: 4,
+},
   
   sessionLevel: {
     fontSize: 14,
@@ -546,14 +549,14 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   
-  scoreContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-    padding: 12,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 8,
-  },
+scoreContainer: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  marginBottom: 8,
+  padding: 12,
+  backgroundColor: 'rgba(51, 65, 85, 0.3)',
+  borderRadius: 8,
+},
   
   scoreItem: {
     alignItems: 'center',
@@ -561,7 +564,7 @@ const styles = StyleSheet.create({
   
   scoreLabel: {
     fontSize: 12,
-    color: '#6B7280',
+    color: '#94A3B8',
     marginBottom: 4,
   },
   
@@ -585,13 +588,13 @@ const styles = StyleSheet.create({
   
   participantInfo: {
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: '#334155',
     paddingTop: 8,
   },
   
   participantText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: '#94A3B8',
     textAlign: 'center',
   },
   
@@ -602,14 +605,14 @@ const styles = StyleSheet.create({
   
   emptyHistoryText: {
     fontSize: 16,
-    color: '#6B7280',
+    color: '#94A3B8',
     marginTop: 12,
     marginBottom: 4,
   },
   
   emptyHistorySubtext: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: '#64748B',
     textAlign: 'center',
   },
 });

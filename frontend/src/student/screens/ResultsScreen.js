@@ -282,8 +282,7 @@ const LevelUpModal = () => (
           style={styles.levelUpButton}
           onPress={() => {
             setLevelUpModal(false);
-            // Refresh the profile screen by navigating to it with params
-            // navigation.navigate('Profile', { levelUpdated: false });
+            // Just close the modal, don't navigate
           }}
           activeOpacity={0.8}
         >
