@@ -206,12 +206,25 @@ checkLevelProgression: (sessionId) => {
   return api.get('/student/level-progression', {
     params: { session_id: sessionId },
     validateStatus: function (status) {
-      return status < 500;
+      return true; // Accept all status codes
     },
     transformResponse: [
       function (data) {
         try {
+          if (!data || typeof data !== 'string' || data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
+            console.log('Received HTML response instead of JSON for level progression');
+            return {
+              promoted: false,
+              old_level: 1,
+              new_level: 1,
+              rank: 0,
+              session_id: sessionId,
+              student_id: ''
+            };
+          }
+          
           const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+          
           return {
             promoted: parsed.promoted || false,
             old_level: parsed.old_level || 1,
@@ -233,6 +246,21 @@ checkLevelProgression: (sessionId) => {
         }
       }
     ]
+  }).then(response => {
+    if (response.status >= 400) {
+      console.log(`Level progression API returned status ${response.status}`);
+      return {
+        data: {
+          promoted: false,
+          old_level: 1,
+          new_level: 1,
+          rank: 0,
+          session_id: sessionId,
+          student_id: ''
+        }
+      };
+    }
+    return response;
   }).catch(error => {
     console.error('Level progression API error:', error);
     return {
@@ -321,15 +349,33 @@ checkSurveyCompletion: (sessionId) => api.get('/student/survey/completion', {
     ]
 }),
 
+getSessionHistory: () => api.get('/student/session-history', {
+    validateStatus: function (status) {
+        return status < 500;
+    },
+    transformResponse: [
+        function (data) {
+            try {
+                const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+                return parsed.sessions || [];
+            } catch (e) {
+                console.error('Session history parsing error:', e);
+                return [];
+            }
+        }
+    ]
+}).catch(error => {
+    console.error('Session history API error:', error);
+    return { data: [] };
+}),
 
-submitSurvey: (data, isFinal = false) => {
-    console.log('[API] Submitting survey with data:', JSON.stringify(data, null, 2));
+ submitSurvey: (data, isFinal = false) => {
+    console.log('[API] Submitting survey for session:', data.sessionId);
     return api.post('/student/survey', {
         session_id: data.sessionId,
         responses: Object.keys(data.responses).reduce((acc, questionKey) => {
             const questionNum = parseInt(questionKey);
             const rankings = data.responses[questionKey];
-            console.log(`[API] Processing question ${questionNum} with rankings:`, rankings);
             
             const formattedRankings = {};
             Object.keys(rankings).forEach(rank => {
@@ -348,97 +394,22 @@ submitSurvey: (data, isFinal = false) => {
         is_final: isFinal
     }, {
         validateStatus: function (status) {
-            console.log('[API] Received status:', status);
-            // Allow all status codes including 500
-            return true;
-        },
-        transformResponse: [
-            function (data) {
-                console.log('[API] Raw response data:', data);
-                try {
-                    const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-                    console.log('[API] Parsed response:', parsed);
-                    return parsed;
-                } catch (e) {
-                    console.error('[API] Response parsing error:', e);
-                    return { error: 'Invalid server response' };
-                }
-            }
-        ]
-    }).catch(error => {
-        console.error('[API] Survey submission error:', {
-            message: error.message,
-            config: error.config,
-            response: error.response?.data
-        });
-        
-        // For 500 errors, return a success response to allow the flow to continue
-        if (error.response?.status === 500) {
-            return { 
-                data: { 
-                    status: 'success',
-                    completed: false,
-                    questions_answered: Object.keys(data.responses).length,
-                    total_questions: Object.keys(data.responses).length
-                }
-            };
+            return true; // Allow all status codes
         }
-        
-        throw error;
     });
-},
-
+  },
   
-getResults: (sessionId) => {
-  return api.get('/student/results', { 
-    params: { session_id: sessionId },
-    validateStatus: function (status) {
-      // Allow all status codes including 500
-      return true;
-    },
-    transformResponse: [
-      function (data) {
-        try {
-          // Handle empty responses
-          if (!data) {
-            return { results: [] };
-          }
-          
-          // Handle non-JSON responses
-          if (typeof data === 'string') {
-            try {
-              return JSON.parse(data);
-            } catch (e) {
-              return { 
-                error: data,
-                results: [] 
-              };
-            }
-          }
-          
-          // Handle proper JSON responses
-          const parsed = typeof data === 'object' ? data : JSON.parse(data);
-          return {
-            ...parsed,
-            results: parsed.results || []
-          };
-        } catch (e) {
-          console.error('Results response parsing error:', e);
-          return { results: [] };
-        }
+  getResults: (sessionId) => {
+    console.log('[API] Getting results for session:', sessionId);
+    return api.get('/student/results', { 
+      params: { session_id: sessionId },
+      validateStatus: function (status) {
+        return true; // Allow all status codes
       }
-    ]
-  }).catch(error => {
-    console.error('Results API error:', error);
-    // Return empty results on error
-    return { 
-      data: { 
-        results: [],
-        session_id: sessionId
-      } 
-    };
-  });
-},
+    });
+  },
+
+
 submitFeedback: (sessionId, rating, comments) => {
   return api.post('/student/feedback', {
     session_id: sessionId,

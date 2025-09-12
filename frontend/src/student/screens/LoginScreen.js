@@ -48,7 +48,7 @@ export default function LoginScreen({ navigation }) {
               <Icon name="school" size={52} color="#fff" />
             </LinearGradient>
           </View>
-          <Text style={styles.title}>Student Login</Text>
+          <Text style={styles.title}>Student Login </Text>
           <Text style={styles.subtitle}>Enter your credentials to continue</Text>
         </View>
         

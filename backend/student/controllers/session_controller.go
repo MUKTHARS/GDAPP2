@@ -13,7 +13,7 @@ import (
 	"net/url"
 	"strconv"
 	"time"
-
+// "strings"
 	"github.com/google/uuid"
 )
 
@@ -1280,7 +1280,6 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
                 log.Printf("Warning: Could not calculate penalties: %v", err)
             }
             
-    
             if err := updateStudentLevel(sessionID); err != nil {
                 log.Printf("Warning: Could not update student levels: %v", err)
             }
@@ -1288,7 +1287,7 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
                 log.Printf("Warning: Could not clear completed bookings: %v", err)
             }
 
-             if err := clearSessionReadyStatus(sessionID); err != nil {
+            if err := clearSessionReadyStatus(sessionID); err != nil {
                 log.Printf("Warning: Could not clear session ready status: %v", err)
             }
         }
@@ -1359,23 +1358,17 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         }{}
     }
 
-    // FIXED: Get scores and penalties - ensure we're penalizing the RESPONDER, not the STUDENT
-    rows, err = database.GetDB().Query(`
+     rows, err = database.GetDB().Query(`
         SELECT 
-            -- Get the RESPONDER_ID (the one who gave the rating) for penalties
             responder_id, 
             SUM(score) as total_score,
-            -- Bias penalties (deviation >= 2.0) - penalize the RESPONDER
             SUM(CASE WHEN deviation >= 2.0 THEN penalty_points ELSE 0 END) as bias_penalty,
-            -- Incomplete ranking penalties (for missing ranks) - penalize the RESPONDER
             SUM(CASE WHEN deviation < 2.0 AND penalty_points > 0 THEN penalty_points ELSE 0 END) as incomplete_penalty,
-            -- Count bias-related penalties for the RESPONDER
             COUNT(CASE WHEN deviation >= 2.0 AND is_biased THEN 1 END) as biased_questions,
-            -- Count incomplete ranking penalties for the RESPONDER
             COUNT(CASE WHEN deviation < 2.0 AND penalty_points > 0 THEN 1 END) as incomplete_questions
         FROM survey_results 
-        WHERE session_id = ? AND is_current_session = 1
-        GROUP BY responder_id`, sessionID)
+        WHERE session_id = ?  -- REMOVED: AND is_current_session = 1
+        GROUP BY responder_id`, sessionID)  // ← Only this session
     
     if err != nil {
         log.Printf("Error getting survey responses: %v", err)
@@ -1409,7 +1402,7 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     rows, err = database.GetDB().Query(`
         SELECT student_id, COUNT(*) as first_places
         FROM survey_results 
-        WHERE session_id = ? AND ranks = 1 AND is_current_session = 1
+        WHERE session_id = ? AND ranks = 1  -- REMOVED: AND is_current_session = 1
         GROUP BY student_id`, sessionID)
     
     if err != nil {
@@ -1495,6 +1488,7 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     })
 }
 
+
 func updateStudentLevel(sessionID string) error {
     tx, err := database.GetDB().Begin()
     if err != nil {
@@ -1564,6 +1558,12 @@ func updateStudentLevel(sessionID string) error {
                     continue
                 }
                 
+                // Track the promotion
+                err = trackStudentPromotion(sessionID, result.StudentID, i+1, result.CurrentLevel)
+                if err != nil {
+                    log.Printf("Error tracking promotion for student %s: %v", result.StudentID, err)
+                }
+                
                 log.Printf("Promoted student %s from level %d to %d (rank %d)", 
                     result.StudentID, result.CurrentLevel, newLevel, i+1)
                 promotedCount++
@@ -1574,75 +1574,17 @@ func updateStudentLevel(sessionID string) error {
     return tx.Commit()
 }
 
-
-// func updateStudentLevel(sessionID string) error {
-//     tx, err := database.GetDB().Begin()
-//     if err != nil {
-//         return fmt.Errorf("failed to begin transaction: %v", err)
-//     }
-//     defer tx.Rollback()
-
-//     // Get all participants with their current levels and final scores
-//     rows, err := tx.Query(`
-//         SELECT 
-//             sr.student_id,
-//             su.current_gd_level,
-//             SUM(sr.weighted_score - sr.penalty_points) as final_score
-//         FROM survey_results sr
-//         JOIN student_users su ON sr.student_id = su.id
-//         WHERE sr.session_id = ? AND sr.is_completed = 1
-//         GROUP BY sr.student_id, su.current_gd_level
-//         ORDER BY final_score DESC`,
-//         sessionID)
+func trackStudentPromotion(sessionID, studentID string, rank int, oldLevel int) error {
+    _, err := database.GetDB().Exec(`
+        INSERT INTO student_promotions 
+        (id, student_id, session_id, old_level, new_level, rank, promoted_at)
+        VALUES (UUID(), ?, ?, ?, LEAST(?, 5), ?, NOW())
+        ON DUPLICATE KEY UPDATE new_level = VALUES(new_level), rank = VALUES(rank)
+    `, studentID, sessionID, oldLevel, oldLevel+1, rank)
     
-//     if err != nil {
-//         return fmt.Errorf("error getting student scores: %v", err)
-//     }
-//     defer rows.Close()
+    return err
+}
 
-//     type StudentResult struct {
-//         StudentID string
-//         CurrentLevel int
-//         FinalScore float64
-//     }
-    
-//     var results []StudentResult
-//     for rows.Next() {
-//         var result StudentResult
-//         if err := rows.Scan(&result.StudentID, &result.CurrentLevel, &result.FinalScore); err != nil {
-//             continue
-//         }
-//         results = append(results, result)
-//     }
-
-//     // Only promote top 3 students who are NOT already at max level (5)
-//     promotedCount := 0
-//     for _, result := range results {
-//         if promotedCount >= 3 {
-//             break // Only promote top 3
-//         }
-        
-//         // Check if student is eligible for promotion (not at max level)
-//         if result.CurrentLevel < 5 {
-//             _, err := tx.Exec(`
-//                 UPDATE student_users 
-//                 SET current_gd_level = current_gd_level + 1 
-//                 WHERE id = ? AND current_gd_level < 5`,
-//                 result.StudentID)
-            
-//             if err != nil {
-//                 log.Printf("Error updating level for student %s: %v", result.StudentID, err)
-//                 continue
-//             }
-            
-//             log.Printf("Promoted student %s from level %d to %d", 
-//                 result.StudentID, result.CurrentLevel, result.CurrentLevel+1)
-//             promotedCount++
-//         }
-//     }
-
-//     return tx.Commit()
-// }
 
 func CheckLevelProgression(w http.ResponseWriter, r *http.Request) {
     studentID := r.Context().Value("studentID").(string)
@@ -1654,71 +1596,9 @@ func CheckLevelProgression(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Get student's current level BEFORE any updates
-    var oldLevel int
-    err := database.GetDB().QueryRow(`
-        SELECT current_gd_level FROM student_users WHERE id = ?`, studentID).Scan(&oldLevel)
-    
-    if err != nil {
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-        return
-    }
-
-    // Check if student was in top 3 and should be promoted
-    var rank int
-    err = database.GetDB().QueryRow(`
-        SELECT ranking FROM (
-            SELECT 
-                student_id,
-                RANK() OVER (ORDER BY SUM(weighted_score - penalty_points) DESC) as ranking
-            FROM survey_results 
-            WHERE session_id = ? AND is_completed = 1
-            GROUP BY student_id
-        ) as ranks
-        WHERE student_id = ?`,
-        sessionID, studentID).Scan(&rank)
-
-    if err != nil && err != sql.ErrNoRows {
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-        return
-    }
-
-    promoted := false
-    // Only promote if in top 3 AND not already at max level
-    if rank <= 3 && rank > 0 && oldLevel < 5 {
-        // Calculate new level (only +1, not based on rank)
-        newLevel := oldLevel + 1
-        if newLevel > 5 {
-            newLevel = 5
-        }
-        
-        // Update level in database
-        result, err := database.GetDB().Exec(`
-            UPDATE student_users 
-            SET current_gd_level = ? 
-            WHERE id = ? AND current_gd_level < 5`,
-            newLevel, studentID)
-        
-        if err != nil {
-            w.WriteHeader(http.StatusInternalServerError)
-            json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update level"})
-            return
-        }
-        
-        rowsAffected, _ := result.RowsAffected()
-        promoted = rowsAffected > 0
-        
-        if promoted {
-            log.Printf("Student %s promoted from level %d to %d (rank %d)", 
-                studentID, oldLevel, newLevel, rank)
-        }
-    }
-
-    // Get updated level from database (not from frontend)
+    // Get student's current level
     var currentLevel int
-    err = database.GetDB().QueryRow(`
+    err := database.GetDB().QueryRow(`
         SELECT current_gd_level FROM student_users WHERE id = ?`, studentID).Scan(&currentLevel)
     
     if err != nil {
@@ -1727,14 +1607,83 @@ func CheckLevelProgression(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    // Check if ALL surveys are completed for this session
+    var totalParticipants, completedCount int
+    err = database.GetDB().QueryRow(`
+        SELECT 
+            COUNT(DISTINCT sp.student_id) as total_participants,
+            COUNT(DISTINCT sc.student_id) as completed_count
+        FROM session_participants sp
+        LEFT JOIN survey_completion sc ON sp.session_id = sc.session_id AND sp.student_id = sc.student_id
+        WHERE sp.session_id = ? AND sp.is_dummy = FALSE`,
+        sessionID).Scan(&totalParticipants, &completedCount)
+    
+    if err != nil {
+        log.Printf("Error checking survey completion for level progression: %v", err)
+        // Continue with individual check
+        completedCount = 0
+        totalParticipants = 0
+    }
+
+    promoted := false
+    var newLevel int = currentLevel
+    var rank int
+
+    // Only check ranking if ALL surveys are completed
+    if completedCount >= totalParticipants && totalParticipants > 0 {
+        // Check if student was in top 3 and should be promoted
+        err = database.GetDB().QueryRow(`
+            SELECT ranking FROM (
+                SELECT 
+                    student_id,
+                    RANK() OVER (ORDER BY SUM(weighted_score - penalty_points) DESC) as ranking
+                FROM survey_results 
+                WHERE session_id = ? AND is_completed = 1
+                GROUP BY student_id
+            ) as ranks
+            WHERE student_id = ?`,
+            sessionID, studentID).Scan(&rank)
+
+        // Only promote if in top 3 AND not already at max level AND all surveys completed
+        if err == nil && rank <= 3 && rank > 0 && currentLevel < 5 {
+            newLevel = currentLevel + 1
+            if newLevel > 5 {
+                newLevel = 5
+            }
+            promoted = true
+            
+            // Update level in database
+            result, err := database.GetDB().Exec(`
+                UPDATE student_users 
+                SET current_gd_level = ? 
+                WHERE id = ? AND current_gd_level < 5`,
+                newLevel, studentID)
+            
+            if err != nil {
+                log.Printf("Failed to update level for student %s: %v", studentID, err)
+                promoted = false
+                newLevel = currentLevel
+            } else {
+                rowsAffected, _ := result.RowsAffected()
+                promoted = rowsAffected > 0
+                if !promoted {
+                    newLevel = currentLevel
+                }
+            }
+        }
+    }
+
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]interface{}{
         "promoted":      promoted,
-        "old_level":     oldLevel,
-        "new_level":     currentLevel, // Use the actual current level from DB
+        "old_level":     currentLevel,
+        "new_level":     newLevel,
         "rank":          rank,
         "session_id":    sessionID,
         "student_id":    studentID,
+        "all_completed": completedCount >= totalParticipants && totalParticipants > 0,
+        "completed":     completedCount,
+        "total":         totalParticipants,
     })
 }
 
@@ -1768,9 +1717,9 @@ func clearCompletedBookings(sessionID string) error {
 
     // Get all students who participated in this completed session
     rows, err := tx.Query(`
-        SELECT student_id 
-        FROM session_participants 
-        WHERE session_id = ? AND is_dummy = FALSE`,
+        SELECT DISTINCT sp.student_id 
+        FROM session_participants sp 
+        WHERE sp.session_id = ? AND sp.is_dummy = FALSE`,
         sessionID)
     
     if err != nil {
@@ -1787,7 +1736,7 @@ func clearCompletedBookings(sessionID string) error {
         studentIDs = append(studentIDs, studentID)
     }
 
-    // Clear current_booking for all participants
+    // Clear current_booking for all participants if it matches this session
     for _, studentID := range studentIDs {
         _, err := tx.Exec(`
             UPDATE student_users 
@@ -1801,6 +1750,17 @@ func clearCompletedBookings(sessionID string) error {
         } else {
             log.Printf("Cleared booking for student %s after session completion", studentID)
         }
+    }
+
+    // Also mark the session as completed if not already
+    _, err = tx.Exec(`
+        UPDATE gd_sessions 
+        SET status = 'completed', end_time = NOW()
+        WHERE id = ? AND status != 'completed'`,
+        sessionID)
+    
+    if err != nil {
+        log.Printf("Error marking session as completed: %v", err)
     }
 
     return tx.Commit()
@@ -1827,20 +1787,48 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
+    // Check venue details and get any active session
+    var venueLevel int
+    var activeSessionID sql.NullString
+    var sessionEndTime sql.NullString
+    err = tx.QueryRow(`
+        SELECT v.level,
+               s.id,
+               s.end_time
+        FROM venues v 
+        LEFT JOIN gd_sessions s ON v.id = s.venue_id 
+            AND s.status IN ('pending', 'active', 'lobby')
+            AND s.end_time > NOW()  -- Only get non-expired sessions
+        WHERE v.id = ? AND v.is_active = TRUE
+        ORDER BY s.created_at DESC LIMIT 1`, req.VenueID).Scan(&venueLevel, &activeSessionID, &sessionEndTime)
+
+    if err != nil {
+        if err == sql.ErrNoRows {
+            w.WriteHeader(http.StatusNotFound)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Venue not found"})
+        } else {
+            log.Printf("Error checking venue: %v", err)
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        }
+        return
+    }
+
+    // If there's an active session, check if it's expired
+    if activeSessionID.Valid && sessionEndTime.Valid {
+        endTime, err := time.Parse("2006-01-02 15:04:05", sessionEndTime.String)
+        if err == nil && (endTime.Before(time.Now()) || endTime.Equal(time.Now())) {
+            w.WriteHeader(http.StatusGone)
+            json.NewEncoder(w).Encode(map[string]string{"error": "This venue session has expired"})
+            return
+        }
+    }
+
 	var studentLevel int
 	err = tx.QueryRow("SELECT current_gd_level FROM student_users WHERE id = ?", studentID).Scan(&studentLevel)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to verify student level"})
-		return
-	}
-
-	// Get venue level
-	var venueLevel int
-	err = tx.QueryRow("SELECT level FROM venues WHERE id = ?", req.VenueID).Scan(&venueLevel)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to verify venue level"})
 		return
 	}
 
@@ -1853,7 +1841,7 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// MODIFIED: Check if student already has an active booking for THIS SPECIFIC LEVEL
+	// Check if student already has an active booking for THIS SPECIFIC LEVEL
 	var activeBookingCount int
 	err = tx.QueryRow(`
         SELECT COUNT(*) 
@@ -1862,6 +1850,7 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
         JOIN venues v ON s.venue_id = v.id
         WHERE sp.student_id = ? 
           AND s.status IN ('pending', 'active', 'lobby')
+          AND s.end_time > NOW()  -- Only count non-expired sessions
           AND v.level = ?`, // Only check for bookings at the same level
 		studentID, venueLevel).Scan(&activeBookingCount)
 
@@ -1879,13 +1868,15 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if venue exists and get capacity
+	// Check venue capacity based on non-expired sessions only
 	var capacity, booked int
 	err = tx.QueryRow(`
         SELECT v.capacity, 
                (SELECT COUNT(*) FROM session_participants sp 
                 JOIN gd_sessions s ON sp.session_id = s.id 
-                WHERE s.venue_id = v.id AND s.status IN ('pending', 'active', 'lobby')) as booked
+                WHERE s.venue_id = v.id 
+                AND s.status IN ('pending', 'active', 'lobby')
+                AND s.end_time > NOW()) as booked  -- Only count non-expired sessions
         FROM venues v 
         WHERE v.id = ? AND v.is_active = TRUE`, req.VenueID).Scan(&capacity, &booked)
 
@@ -1907,32 +1898,27 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create a new session if needed
+	// Create a new session if needed or use existing non-expired session
 	var sessionID string
-	err = tx.QueryRow(`
-        SELECT id FROM gd_sessions 
-        WHERE venue_id = ? AND status IN ('pending', 'lobby')
-        ORDER BY start_time ASC LIMIT 1`, req.VenueID).Scan(&sessionID)
-
-	if err == sql.ErrNoRows {
-		// Create new session
-		sessionID = uuid.New().String()
-		_, err = tx.Exec(`
+	if activeSessionID.Valid {
+        sessionID = activeSessionID.String
+        log.Printf("Using existing session %s for venue %s", sessionID, req.VenueID)
+    } else {
+        // Create new session with proper 2-hour duration
+        sessionID = uuid.New().String()
+        _, err = tx.Exec(`
             INSERT INTO gd_sessions 
             (id, venue_id, status, start_time, end_time, level) 
-            VALUES (?, ?, 'pending', NOW(), DATE_ADD(NOW(), INTERVAL 1 HOUR), ?)`,
-			sessionID, req.VenueID, venueLevel)
-		if err != nil {
-			log.Printf("Failed to create session: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create session"})
-			return
-		}
-	} else if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-		return
-	}
+            VALUES (?, ?, 'pending', NOW(), DATE_ADD(NOW(), INTERVAL 2 HOUR), ?)`,
+            sessionID, req.VenueID, venueLevel)
+        if err != nil {
+            log.Printf("Failed to create session: %v", err)
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create session"})
+            return
+        }
+        log.Printf("Created new session %s for venue %s with 2-hour duration", sessionID, req.VenueID)
+    }
 
 	// Check if student is already in this specific session
 	var isAlreadyInSession bool
@@ -1954,7 +1940,6 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	
 	_, err = tx.Exec(`
         INSERT INTO session_participants 
         (id, session_id, student_id, is_dummy) 
@@ -1977,7 +1962,6 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
 	
 	if err != nil {
 		log.Printf("Failed to update student booking: %v", err)
-		
 	}
 
 	// Commit transaction
@@ -1999,61 +1983,116 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
-	levelStr := r.URL.Query().Get("level")
-	level, err := strconv.Atoi(levelStr)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid level"})
-		return
-	}
+    levelStr := r.URL.Query().Get("level")
+    level, err := strconv.Atoi(levelStr)
+    if err != nil {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid level"})
+        return
+    }
 
-	rows, err := database.GetDB().Query(`
-        SELECT v.id, v.name, v.capacity, v.session_timing, v.table_details, v.level,
-               (SELECT COUNT(*) FROM session_participants sp 
+    // Get all venues with session information
+    rows, err := database.GetDB().Query(`
+        SELECT 
+            v.id, 
+            v.name, 
+            v.capacity, 
+            v.session_timing, 
+            v.table_details, 
+            v.level,
+            COALESCE((
+                SELECT COUNT(*) 
+                FROM session_participants sp 
                 JOIN gd_sessions s ON sp.session_id = s.id 
-                WHERE s.venue_id = v.id) as booked
+                WHERE s.venue_id = v.id 
+                AND s.status IN ('pending', 'active', 'lobby')
+                AND s.end_time > NOW()  -- Only count non-expired sessions
+            ), 0) as booked,
+            -- Get the most recent active session's end time
+            (
+                SELECT s.end_time 
+                FROM gd_sessions s 
+                WHERE s.venue_id = v.id 
+                AND s.status IN ('pending', 'active', 'lobby')
+                ORDER BY s.created_at DESC 
+                LIMIT 1
+            ) as session_end_time,
+            -- Check if venue has any active non-expired session
+            EXISTS(
+                SELECT 1 FROM gd_sessions s 
+                WHERE s.venue_id = v.id 
+                AND s.status IN ('pending', 'active', 'lobby')
+                AND s.end_time > NOW()
+            ) as has_active_session
         FROM venues v 
-        WHERE v.level = ? AND v.is_active = TRUE`, level)
+        WHERE v.level = ? 
+        AND v.is_active = TRUE
+        ORDER BY v.name`, level)
 
-	if err != nil {
-		log.Printf("Database error: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-		return
-	}
-	defer rows.Close()
+    if err != nil {
+        log.Printf("Database error: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+    defer rows.Close()
 
-	var venues []map[string]interface{}
-	for rows.Next() {
-		var venue struct {
-			ID            string
-			Name          string
-			Capacity      int
-			SessionTiming string
-			TableDetails  string
-			Level         int
-			Booked        int
-		}
-		if err := rows.Scan(&venue.ID, &venue.Name, &venue.Capacity,
-			&venue.SessionTiming, &venue.TableDetails, &venue.Level, &venue.Booked); err != nil {
-			log.Printf("Error scanning venue row: %v", err)
-			continue
-		}
+    var venues []map[string]interface{}
+    now := time.Now()
+    
+    for rows.Next() {
+        var venue struct {
+            ID              string
+            Name            string
+            Capacity        int
+            SessionTiming   string
+            TableDetails    string
+            Level           int
+            Booked          int
+            SessionEndTime  sql.NullString
+            HasActiveSession bool
+        }
+        
+        if err := rows.Scan(&venue.ID, &venue.Name, &venue.Capacity,
+            &venue.SessionTiming, &venue.TableDetails, &venue.Level, 
+            &venue.Booked, &venue.SessionEndTime, &venue.HasActiveSession); err != nil {
+            log.Printf("Error scanning venue row: %v", err)
+            continue
+        }
 
-		venues = append(venues, map[string]interface{}{
-			"id":             venue.ID,
-			"venue_name":     venue.Name,
-			"capacity":       venue.Capacity,
-			"booked":         venue.Booked,
-			"remaining":      venue.Capacity - venue.Booked,
-			"session_timing": venue.SessionTiming,
-			"table_details":  venue.TableDetails,
-			"level":          venue.Level,
-		})
-	}
+        // Determine if session is expired
+        isExpired := false
+        if venue.SessionEndTime.Valid {
+            endTime, err := time.Parse("2006-01-02 15:04:05", venue.SessionEndTime.String)
+            if err != nil {
+                log.Printf("Error parsing end time for venue %s: %v", venue.ID, err)
+                isExpired = false // If we can't parse, assume not expired
+            } else {
+                isExpired = endTime.Before(now) || endTime.Equal(now)
+            }
+        }
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(venues)
+        // Log for debugging
+        log.Printf("Venue %s: HasActiveSession=%t, EndTime=%s, IsExpired=%t, Now=%s", 
+            venue.Name, venue.HasActiveSession, venue.SessionEndTime.String, isExpired, now.Format("2006-01-02 15:04:05"))
+
+        venues = append(venues, map[string]interface{}{
+            "id":             venue.ID,
+            "venue_name":     venue.Name,
+            "capacity":       venue.Capacity,
+            "booked":         venue.Booked,
+            "remaining":      venue.Capacity - venue.Booked,
+            "session_timing": venue.SessionTiming,
+            "table_details":  venue.TableDetails,
+            "level":          venue.Level,
+            "has_active_session": venue.HasActiveSession,
+            "is_expired":     isExpired,
+            "end_time":       venue.SessionEndTime.String,
+        })
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(venues)
 }
 
 func CheckBooking(w http.ResponseWriter, r *http.Request) {
@@ -2219,10 +2258,6 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error cleaning up stale phase tracking: %v", err)
 	}
 
-	// Get current active participants who:
-	// 1. Are booked for this session
-	// 2. Have scanned QR (have phase tracking)
-	// 3. Have active phase tracking within last 5 minutes
 	rows, err := database.GetDB().Query(`
         SELECT DISTINCT su.id, su.full_name, su.department, 
                COALESCE(su.photo_url, '') as profileImage 

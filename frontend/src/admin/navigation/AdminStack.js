@@ -111,4 +111,3 @@ const getHeaderTitle = (route) => {
 };
 
 export default AdminStack;
-

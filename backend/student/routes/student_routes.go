@@ -87,10 +87,19 @@ func SetupStudentRoutes() *http.ServeMux {
 		http.HandlerFunc(controllers.UpdateReadyStatus)))
 	router.Handle(baseurl+"/session/ready-status", middleware.StudentOnly(
 		http.HandlerFunc(controllers.GetReadyStatus)))
+	router.Handle(baseurl+"/session-history", middleware.StudentOnly(
+		http.HandlerFunc(controllers.GetStudentSessionHistory)))
+	
+	// FIXED: Use the correct middleware and function name
+	router.Handle(baseurl+"/level-progression", middleware.StudentOnly(
+		http.HandlerFunc(controllers.CheckLevelProgression)))
+	
 	router.Handle(baseurl+"/session/check-all-ready", middleware.StudentOnly(
 		http.HandlerFunc(controllers.CheckAllReady)))
+	
 	return router
 }
+
 func getProjectRoot() string {
 	wd, _ := os.Getwd()
 	return filepath.Dir(filepath.Dir(wd)) 

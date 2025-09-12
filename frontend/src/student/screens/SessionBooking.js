@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, FlatList, Text, TouchableOpacity, StyleSheet, ScrollView ,ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
+import { View, FlatList, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, Modal, TextInput, ImageBackground } from 'react-native';
 import api from '../services/api';
 import auth from '../services/auth'; 
 import { globalStyles, colors, layout } from '../assets/globalStyles';
@@ -9,7 +9,7 @@ import HamburgerHeader from '../components/HamburgerHeader';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import StoryCircles from '../components/StoryCircles';
-import { ImageBackground } from 'react-native';
+
 export default function SessionBooking() {
   const [venues, setVenues] = useState([]);
   const [level, setLevel] = useState(1);
@@ -22,45 +22,35 @@ export default function SessionBooking() {
   const [bookedVenues, setBookedVenues] = useState([]);
   const navigation = useNavigation();
 
+  const getVenueBackgroundImage = (venueId) => {
+    const backgroundImages = [
+      { uri: 'https://plus.unsplash.com/premium_photo-1687919417608-09b4f68aafca?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8ZGFyayUyMHZlbnVlcyUyMHdpdGglMjBuZW9uJTIwY29sb3Vyc3xlbnwwfHwwfHx8MA%3D%3D' },
+      { uri: 'https://plus.unsplash.com/premium_photo-1687894509815-fcf10b8b4e6a?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTd8fGRhcmslMjB2ZW51ZXMlMjB3aXRoJTIwbmVvbiUyMGNvbG91cnN8ZW58MHx8MHx8fDA%3D' },
+      { uri: 'https://images.unsplash.com/photo-1699907236334-ee4cf86eba5c?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' },
+      { uri: 'https://images.unsplash.com/photo-1748280887521-6967d0f27450?q=80&w=1171&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' },
+      { uri: 'https://images.unsplash.com/photo-1693756948617-4f7bdd57bf54?q=80&w=1076&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' },
+    ];
 
- const getVenueBackgroundImage = (venueId) => {
-  const backgroundImages = [
-    { uri: 'https://plus.unsplash.com/premium_photo-1687919417608-09b4f68aafca?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8ZGFyayUyMHZlbnVlcyUyMHdpdGglMjBuZW9uJTIwY29sb3Vyc3xlbnwwfHwwfHx8MA%3D%3D' },
-    { uri: 'https://plus.unsplash.com/premium_photo-1687894509815-fcf10b8b4e6a?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTd8fGRhcmslMjB2ZW51ZXMlMjB3aXRoJTIwbmVvbiUyMGNvbG91cnN8ZW58MHx8MHx8fDA%3D' },
-    { uri: 'https://images.unsplash.com/photo-1699907236334-ee4cf86eba5c?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' },
-    { uri: 'https://images.unsplash.com/photo-1748280887521-6967d0f27450?q=80&w=1171&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' },
-    { uri: 'https://images.unsplash.com/photo-1693756948617-4f7bdd57bf54?q=80&w=1076&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' },
-  ];
-
-  let id;
-  if (typeof venueId === 'string') {
-    let hash = 0;
-    for (let i = 0; i < venueId.length; i++) {
-      hash = ((hash << 5) - hash) + venueId.charCodeAt(i);
-      hash = hash & hash;
+    let id;
+    if (typeof venueId === 'string') {
+      let hash = 0;
+      for (let i = 0; i < venueId.length; i++) {
+        hash = ((hash << 5) - hash) + venueId.charCodeAt(i);
+        hash = hash & hash;
+      }
+      id = Math.abs(hash);
+    } else {
+      id = venueId || 0;
     }
-    id = Math.abs(hash);
-  } else {
-    id = venueId || 0;
-  }
 
-  const imageIndex = id % backgroundImages.length;
-  return backgroundImages[imageIndex];
-};
+    const imageIndex = id % backgroundImages.length;
+    return backgroundImages[imageIndex];
+  };
 
-  // Function to get different colors based on venue ID for subtle variety
   const getVenueAccentColor = (venueId) => {
     const accentColors = [
-      '#4F46E5', // Indigo
-      '#7C3AED', // Purple
-      '#2563EB', // Blue
-      '#059669', // Emerald
-      '#DC2626', // Red
-      '#EA580C', // Orange
-      '#0891B2', // Cyan
-      '#9333EA', // Violet
-      '#16A34A', // Green
-      '#C2410C', // Orange-red
+      '#4F46E5', '#7C3AED', '#2563EB', '#059669', '#DC2626',
+      '#EA580C', '#0891B2', '#9333EA', '#16A34A', '#C2410C',
     ];
     
     let id;
@@ -79,132 +69,7 @@ export default function SessionBooking() {
     return accentColors[colorIndex] || '#4F46E5';
   };
 
-  // Function to get gradient colors for venue cards
-  const getVenueGradientColors = (venueId) => {
-    const baseColor = getVenueAccentColor(venueId);
-    // Create a darker version for gradient
-    const darkColor = baseColor + '15'; // 15% opacity
-    const lighterColor = baseColor + '25'; // 25% opacity
-    return [darkColor, lighterColor];
-  };
-
-  // Function to get line pattern type based on venue ID
-  const getPatternType = (venueId) => {
-    let id;
-    if (typeof venueId === 'string') {
-      let hash = 0;
-      for (let i = 0; i < venueId.length; i++) {
-        hash = ((hash << 5) - hash) + venueId.charCodeAt(i);
-        hash = hash & hash;
-      }
-      id = Math.abs(hash);
-    } else {
-      id = venueId || 0;
-    }
-    
-    const patterns = ['diagonal', 'grid', 'vertical', 'dots'];
-    return patterns[id % patterns.length];
-  };
-
-  // Function to render pattern overlay
-  const renderPatternOverlay = (venueId) => {
-    const patternType = getPatternType(venueId);
-    const accentColor = getVenueAccentColor(venueId);
-    
-    switch (patternType) {
-      case 'diagonal':
-        return (
-          <View style={styles.patternOverlay}>
-            {[...Array(8)].map((_, i) => (
-              <View 
-                key={i}
-                style={[
-                  styles.diagonalLine,
-                  { 
-                    backgroundColor: accentColor + '08',
-                    left: i * 40 - 20,
-                  }
-                ]} 
-              />
-            ))}
-          </View>
-        );
-      case 'grid':
-        return (
-          <View style={styles.patternOverlay}>
-            {[...Array(6)].map((_, i) => (
-              <View key={`h-${i}`}>
-                <View 
-                  style={[
-                    styles.horizontalLine,
-                    { 
-                      backgroundColor: accentColor + '06',
-                      top: i * 30,
-                    }
-                  ]} 
-                />
-              </View>
-            ))}
-            {[...Array(4)].map((_, i) => (
-              <View key={`v-${i}`}>
-                <View 
-                  style={[
-                    styles.verticalLine,
-                    { 
-                      backgroundColor: accentColor + '06',
-                      left: i * 80,
-                    }
-                  ]} 
-                />
-              </View>
-            ))}
-          </View>
-        );
-      case 'vertical':
-        return (
-          <View style={styles.patternOverlay}>
-            {[...Array(6)].map((_, i) => (
-              <View 
-                key={i}
-                style={[
-                  styles.verticalLine,
-                  { 
-                    backgroundColor: accentColor + '08',
-                    left: i * 50,
-                  }
-                ]} 
-              />
-            ))}
-          </View>
-        );
-      case 'dots':
-        return (
-          <View style={styles.patternOverlay}>
-            {[...Array(40)].map((_, i) => {
-              const row = Math.floor(i / 8);
-              const col = i % 8;
-              return (
-                <View 
-                  key={i}
-                  style={[
-                    styles.dot,
-                    { 
-                      backgroundColor: accentColor + '08',
-                      left: col * 40,
-                      top: row * 30,
-                    }
-                  ]} 
-                />
-              );
-            })}
-          </View>
-        );
-      default:
-        return null;
-    }
-  };
-
- const fetchVenues = async (lvl) => {
+const fetchVenues = async (lvl) => {
   try {
     setLoading(true);
     setError(null);
@@ -219,25 +84,45 @@ export default function SessionBooking() {
     
     if (!response.data || response.data.length === 0) {
       setError(`No venues found for level ${lvl}.`);
+      setVenues([]);
+      setBookedVenues([]);
     } else {
-      setVenues(response.data);
-      // Check booking status for each venue with better error handling
+      // Process venues with proper expiry logic
+      const processedVenues = response.data.map(venue => {
+        let isExpired = false;
+        
+        // Check if venue has an active session and if it's expired
+        if (venue.has_active_session && venue.end_time) {
+          const endTime = new Date(venue.end_time);
+          const now = new Date();
+          
+          // Add timezone offset handling if needed
+          isExpired = endTime <= now;
+          
+          console.log(`Venue ${venue.venue_name}: EndTime=${venue.end_time}, Now=${now.toISOString()}, IsExpired=${isExpired}`);
+        }
+        
+        return {
+          ...venue,
+          is_expired: isExpired
+        };
+      });
+      
+      // Set processed venues
+      setVenues(processedVenues);
+      
+      // Check booking status only for non-expired venues
       const booked = [];
-      for (const venue of response.data) {
-        try {
-          const bookingResponse = await api.student.checkBooking(venue.id);
-          // Handle both successful responses and error responses
-          if (bookingResponse.data && bookingResponse.data.is_booked !== undefined) {
-            if (bookingResponse.data.is_booked) {
+      for (const venue of processedVenues) {
+        if (!venue.is_expired) {
+          try {
+            const bookingResponse = await api.student.checkBooking(venue.id);
+            if (bookingResponse.data && bookingResponse.data.is_booked) {
               booked.push(venue.id);
             }
-          } else if (bookingResponse.data && bookingResponse.data.error) {
-            console.log('Booking check returned error, assuming not booked:', bookingResponse.data.error);
-            // Continue without adding to booked array
+          } catch (error) {
+            console.log('Booking check failed for venue:', venue.id);
           }
-        } catch (error) {
-          console.log('Booking check failed for venue:', venue.id, 'Assuming not booked');
-          // Don't add to booked array on error - assume not booked
         }
       }
       setBookedVenues(booked);
@@ -246,6 +131,7 @@ export default function SessionBooking() {
     console.error('Venues fetch error:', error);
     setError(error.response?.data?.error || error.message || 'Failed to load venues');
     setVenues([]);
+    setBookedVenues([]);
   } finally {
     setLoading(false);
   }
@@ -253,7 +139,14 @@ export default function SessionBooking() {
 
   const openVenueDetails = (venue) => {
     setSelectedVenue(venue);
-    checkIfBooked(venue.id);
+    
+    // Only check booking status for non-expired venues
+    if (!venue.is_expired) {
+      checkIfBooked(venue.id);
+    } else {
+      setIsBooked(false); // Expired venues can't be booked
+    }
+    
     setIsModalVisible(true);
   };
 
@@ -269,6 +162,12 @@ export default function SessionBooking() {
   };
 
   const handleBookVenue = async () => {
+    // Prevent booking expired venues
+    if (selectedVenue.is_expired) {
+      Alert.alert('Booking Failed', 'This session has expired and cannot be booked');
+      return;
+    }
+
     try {
       setLoading(true);
       const authData = await auth.getAuthData();
@@ -299,6 +198,8 @@ export default function SessionBooking() {
         errorMessage = 'You have already booked this venue';
       } else if (error.response?.status === 403) {
         errorMessage = 'You can only have one active booking at a time';
+      } else if (error.response?.status === 410) {
+        errorMessage = 'This session has expired and cannot be booked';
       }
       Alert.alert('Booking Failed', errorMessage);
     } finally {
@@ -350,94 +251,140 @@ export default function SessionBooking() {
 
   const renderVenueItem = ({ item }) => (
     <TouchableOpacity 
-      style={[styles.venueCard, { borderLeftColor: getVenueAccentColor(item.id) }]}
+      style={[
+        styles.venueCard, 
+        { 
+          borderLeftColor: getVenueAccentColor(item.id),
+          opacity: item.is_expired ? 0.7 : 1
+        }
+      ]}
       onPress={() => openVenueDetails(item)}
       disabled={loading}
       activeOpacity={0.7}
     >
       <ImageBackground
-  source={getVenueBackgroundImage(item.id)}
-  style={styles.venueCardGradient}
-  imageStyle={styles.venueCardBackgroundImage}
->
-  <LinearGradient
-    colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.6)']}
-    start={{x: 0, y: 0}}
-    end={{x: 0, y: 1}}
-    style={styles.venueCardOverlay}
-  >
-        {renderPatternOverlay(item.id)}
-        <View style={styles.cardContent}>
-          <View style={styles.cardHeader}>
-            <View style={styles.venueNameContainer}>
-              <View style={[styles.venueIconContainer, { backgroundColor: getVenueAccentColor(item.id) + '40' }]}>
-                <Icon name="place" size={18} color={getVenueAccentColor(item.id)} />
-              </View>
-              <Text style={styles.venueName}>{item.venue_name}</Text>
+        source={getVenueBackgroundImage(item.id)}
+        style={styles.venueCardGradient}
+        imageStyle={styles.venueCardBackgroundImage}
+      >
+        <LinearGradient
+          colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.6)']}
+          start={{x: 0, y: 0}}
+          end={{x: 0, y: 1}}
+          style={styles.venueCardOverlay}
+        >
+          {/* Expired Session Banner */}
+          {item.is_expired && (
+            <View style={styles.expiredBanner}>
+              <Icon name="schedule" size={14} color="#fff" />
+              <Text style={styles.expiredBannerText}>Session Expired</Text>
             </View>
-            {bookedVenues.includes(item.id) && (
-              <View style={styles.bookedBadge}>
-                <Icon name="check-circle" size={14} color="#10B981" />
-                <Text style={styles.bookedBadgeText}>Booked</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.cardBody}>
-            <View style={styles.infoRow}>
-              <View style={styles.infoItem}>
-                <Icon name="schedule" size={16} color="#CBD5E1" />
-                <Text style={styles.infoLabel}>Timing</Text>
-                <Text style={styles.infoValue}>{item.session_timing || 'Not specified'}</Text>
-              </View>
-              
-              <View style={styles.infoItem}>
-                <Icon name="group" size={16} color="#CBD5E1" />
-                <Text style={styles.infoLabel}>Capacity</Text>
-                <Text style={styles.infoValue}>{item.capacity}</Text>
-              </View>
-            </View>
-
-            <View style={styles.availabilitySection}>
-              <View style={styles.availabilityHeader}>
-                <Text style={styles.availabilityLabel}>Available Spots</Text>
-                <Text style={[styles.availabilityNumber, { color: getAvailabilityColor(item.remaining, item.capacity) }]}>
-                  {item.remaining}
-                </Text>
-              </View>
-              <View style={styles.progressBarContainer}>
-                <View style={styles.progressBar}>
-                  <View 
-                    style={[
-                      styles.progressFill,
-                      { 
-                        width: `${(item.remaining / item.capacity) * 100}%`,
-                        backgroundColor: getAvailabilityColor(item.remaining, item.capacity)
-                      }
-                    ]} 
+          )}
+          
+          <View style={styles.cardContent}>
+            <View style={styles.cardHeader}>
+              <View style={styles.venueNameContainer}>
+                <View style={[styles.venueIconContainer, { 
+                  backgroundColor: item.is_expired ? '#6B7280' : getVenueAccentColor(item.id) + '40' 
+                }]}>
+                  <Icon 
+                    name="place" 
+                    size={18} 
+                    color={item.is_expired ? '#9CA3AF' : getVenueAccentColor(item.id)} 
                   />
                 </View>
-                <Text style={styles.progressText}>
-                  {Math.round((item.remaining / item.capacity) * 100)}%
+                <Text style={[
+                  styles.venueName,
+                  item.is_expired && styles.expiredText
+                ]}>
+                  {item.venue_name}
                 </Text>
               </View>
+              {bookedVenues.includes(item.id) && !item.is_expired && (
+                <View style={styles.bookedBadge}>
+                  <Icon name="check-circle" size={14} color="#10B981" />
+                  <Text style={styles.bookedBadgeText}>Booked</Text>
+                </View>
+              )}
             </View>
-          </View>
 
-          <View style={styles.cardFooter}>
-            <View style={styles.statusIndicator}>
-              <View style={[
-                styles.statusDot, 
-                { backgroundColor: item.remaining > 0 ? '#10B981' : '#EF4444' }
-              ]} />
-              <Text style={styles.statusText}>
-                {item.remaining > 0 ? 'Available' : 'Full'}
-              </Text>
+            <View style={styles.cardBody}>
+              <View style={styles.infoRow}>
+                <View style={styles.infoItem}>
+                  <Icon name="schedule" size={16} color={item.is_expired ? "#6B7280" : "#CBD5E1"} />
+                  <Text style={[
+                    styles.infoLabel,
+                    item.is_expired && styles.expiredText
+                  ]}>Timing</Text>
+                  <Text style={[
+                    styles.infoValue,
+                    item.is_expired && styles.expiredText
+                  ]}>{item.session_timing || 'Not specified'}</Text>
+                </View>
+                
+                <View style={styles.infoItem}>
+                  <Icon name="group" size={16} color={item.is_expired ? "#6B7280" : "#CBD5E1"} />
+                  <Text style={[
+                    styles.infoLabel,
+                    item.is_expired && styles.expiredText
+                  ]}>Capacity</Text>
+                  <Text style={[
+                    styles.infoValue,
+                    item.is_expired && styles.expiredText
+                  ]}>{item.capacity}</Text>
+                </View>
+              </View>
+
+              {!item.is_expired && (
+                <View style={styles.availabilitySection}>
+                  <View style={styles.availabilityHeader}>
+                    <Text style={styles.availabilityLabel}>Available Spots</Text>
+                    <Text style={[styles.availabilityNumber, { 
+                      color: getAvailabilityColor(item.remaining, item.capacity) 
+                    }]}>
+                      {item.remaining}
+                    </Text>
+                  </View>
+                  <View style={styles.progressBarContainer}>
+                    <View style={styles.progressBar}>
+                      <View 
+                        style={[
+                          styles.progressFill,
+                          { 
+                            width: `${(item.remaining / item.capacity) * 100}%`,
+                            backgroundColor: getAvailabilityColor(item.remaining, item.capacity)
+                          }
+                        ]} 
+                      />
+                    </View>
+                    <Text style={styles.progressText}>
+                      {Math.round((item.remaining / item.capacity) * 100)}%
+                    </Text>
+                  </View>
+                </View>
+              )}
             </View>
-            <Icon name="keyboard-arrow-right" size={20} color="#CBD5E1" />
+
+            <View style={styles.cardFooter}>
+              <View style={styles.statusIndicator}>
+                <View style={[
+                  styles.statusDot, 
+                  { 
+                    backgroundColor: item.is_expired ? '#6B7280' : 
+                      (item.remaining > 0 ? '#10B981' : '#EF4444') 
+                  }
+                ]} />
+                <Text style={[
+                  styles.statusText,
+                  item.is_expired && styles.expiredText
+                ]}>
+                  {item.is_expired ? 'Expired' : (item.remaining > 0 ? 'Available' : 'Full')}
+                </Text>
+              </View>
+              <Icon name="keyboard-arrow-right" size={20} color="#CBD5E1" />
+            </View>
           </View>
-        </View>
-      </LinearGradient>
+        </LinearGradient>
       </ImageBackground>
     </TouchableOpacity>
   );
@@ -449,34 +396,35 @@ export default function SessionBooking() {
           <Text style={styles.title}>Session Booking</Text>
           <Text style={styles.subtitle}>Find and book your discussion sessions</Text>
         </View>
-<StoryCircles/>
+        <StoryCircles/>
+
         <View style={styles.levelSelector}>
-  <ScrollView 
-    horizontal 
-    showsHorizontalScrollIndicator={false}
-    contentContainerStyle={styles.levelScrollContent}
-  >
-    {[1, 2, 3, 4, 5].map((lvl) => (
-      <TouchableOpacity
-        key={lvl}
-        style={[
-          styles.levelButton,
-          level === lvl && styles.levelButtonActive
-        ]}
-        onPress={() => handleLevelChange(lvl)}
-        disabled={loading}
-        activeOpacity={0.7}
-      >
-        <Text style={[
-          styles.levelButtonText,
-          level === lvl && styles.levelButtonTextActive
-        ]}>
-          Level {lvl}
-        </Text>
-      </TouchableOpacity>
-    ))}
-  </ScrollView>
-</View>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.levelScrollContent}
+          >
+            {[1, 2, 3, 4, 5].map((lvl) => (
+              <TouchableOpacity
+                key={lvl}
+                style={[
+                  styles.levelButton,
+                  level === lvl && styles.levelButtonActive
+                ]}
+                onPress={() => handleLevelChange(lvl)}
+                disabled={loading}
+                activeOpacity={0.7}
+              >
+                <Text style={[
+                  styles.levelButtonText,
+                  level === lvl && styles.levelButtonTextActive
+                ]}>
+                  Level {lvl}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
 
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -584,7 +532,16 @@ export default function SessionBooking() {
                     </View>
                   </View>
                   
-                  {isBooked ? (
+                  {selectedVenue.is_expired && (
+                    <View style={styles.expiredSessionBanner}>
+                      <Icon name="error-outline" size={20} color="#DC2626" />
+                      <Text style={styles.expiredSessionText}>
+                        This session has expired and cannot be booked
+                      </Text>
+                    </View>
+                  )}
+                  
+                  {!selectedVenue.is_expired && isBooked ? (
                     <View style={styles.modalBookedSection}>
                       <View style={styles.modalBookedStatus}>
                         <Icon name="check-circle" size={20} color="#10B981" />
@@ -624,20 +581,31 @@ export default function SessionBooking() {
                       </TouchableOpacity>
                     </View>
                   ) : (
-                    <TouchableOpacity
-                      style={[
-                        styles.modalActionButton,
-                        styles.modalBookButton,
-                        selectedVenue.remaining <= 0 && styles.modalActionButtonDisabled
-                      ]}
-                      onPress={handleBookVenue}
-                      disabled={loading || selectedVenue.remaining <= 0}
-                    >
-                      <Icon name={selectedVenue.remaining <= 0 ? "block" : "event-available"} size={18} color="#fff" />
-                      <Text style={styles.modalActionButtonText}>
-                        {selectedVenue.remaining <= 0 ? 'Fully Booked' : 'Book Session'}
-                      </Text>
-                    </TouchableOpacity>
+                      <TouchableOpacity
+    style={[
+      styles.modalActionButton,
+      styles.modalBookButton,
+      (selectedVenue.remaining <= 0 || selectedVenue.is_expired || isBooked) && 
+      styles.modalActionButtonDisabled
+    ]}
+    onPress={handleBookVenue}
+    disabled={loading || selectedVenue.remaining <= 0 || selectedVenue.is_expired || isBooked}
+  >
+    <Icon 
+      name={
+        selectedVenue.is_expired ? "block" : 
+        selectedVenue.remaining <= 0 ? "block" : 
+        isBooked ? "check-circle" : "event-available"
+      } 
+      size={18} 
+      color="#fff" 
+    />
+    <Text style={styles.modalActionButtonText}>
+      {selectedVenue.is_expired ? 'Session Expired' : 
+       selectedVenue.remaining <= 0 ? 'Fully Booked' : 
+       isBooked ? 'Already Booked' : 'Book Session'}
+    </Text>
+  </TouchableOpacity>
                   )}
                 </View>
               </>
@@ -648,7 +616,6 @@ export default function SessionBooking() {
     </View>
   );
 }
-
 
 const styles = StyleSheet.create({
   container: {
@@ -1096,5 +1063,20 @@ levelScrollContent: {
   flexDirection: 'row',
   paddingHorizontal: 4,
 },
-});
 
+expiredSessionBanner: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#FEF2F2',
+  padding: 12,
+  borderRadius: 8,
+  marginBottom: 16,
+  borderWidth: 1,
+  borderColor: '#FECACA',
+},
+expiredSessionText: {
+  color: '#DC2626',
+  marginLeft: 8,
+  fontWeight: '500',
+},
+});

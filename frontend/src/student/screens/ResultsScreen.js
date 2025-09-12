@@ -133,62 +133,65 @@ export default function ResultsScreen({ route, navigation }) {
   const [levelUpModal, setLevelUpModal] = useState(false);
     const [promotionData, setPromotionData] = useState(null);
 
- useEffect(() => {
-        const fetchResultsAndCheckLevel = async () => {
+useEffect(() => {
+  const fetchResultsAndCheckLevel = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch results first
+      const response = await api.student.getResults(sessionId);
+      
+      console.log('Results API response:', response.data);
+      
+      if (response.data?.results) {
+        const processedResults = response.data.results
+          .map(item => ({
+            ...item,
+            total_score: typeof item.total_score === 'string' ? 
+              parseFloat(item.total_score) : item.total_score || 0,
+            penalty_points: typeof item.penalty_points === 'string' ? 
+              parseFloat(item.penalty_points) : item.penalty_points || 0,
+            final_score: typeof item.final_score === 'string' ? 
+              parseFloat(item.final_score) : 
+              (item.total_score || 0) - (item.penalty_points || 0),
+            biased_questions: item.biased_questions || 0
+          }))
+          .sort((a, b) => b.final_score - a.final_score);
+        
+        setResults(processedResults);
+        
+        // Check if current user was promoted (only for top 3)
+        try {
+          const promotionResponse = await api.student.checkLevelProgression(sessionId);
+          
+          // Check if promotion data exists and user was promoted
+          if (promotionResponse.data && promotionResponse.data.promoted) {
+            setPromotionData(promotionResponse.data);
+            setLevelUpModal(true);
+            
+            // Update local storage with new level
             try {
-                setLoading(true);
-                
-                // Fetch results first
-                const response = await api.student.getResults(sessionId);
-                
-                console.log('Results API response:', response.data);
-                
-                if (response.data?.results) {
-                    const processedResults = response.data.results
-                        .map(item => ({
-                            ...item,
-                            total_score: typeof item.total_score === 'string' ? 
-                                parseFloat(item.total_score) : item.total_score || 0,
-                            penalty_points: typeof item.penalty_points === 'string' ? 
-                                parseFloat(item.penalty_points) : item.penalty_points || 0,
-                            final_score: typeof item.final_score === 'string' ? 
-                                parseFloat(item.final_score) : 
-                                (item.total_score || 0) - (item.penalty_points || 0),
-                            biased_questions: item.biased_questions || 0
-                        }))
-                        .sort((a, b) => b.final_score - a.final_score);
-                    
-                    setResults(processedResults);
-                    
-                    // Check if current user was promoted
-                    try {
-                        const authData = await auth.getAuthData();
-                        const promotionResponse = await api.student.checkLevelProgression(sessionId);
-                        
-                        if (promotionResponse.data.promoted) {
-                            setPromotionData(promotionResponse.data);
-                            setLevelUpModal(true);
-                            
-                            // Update local storage with new level
-                            await AsyncStorage.setItem('userLevel', promotionResponse.data.new_level.toString());
-                        }
-                    } catch (promotionError) {
-                        console.log('Level progression check failed:', promotionError);
-                        // Continue without showing promotion modal
-                    }
-                } else {
-                    setError('No results available for this session');
-                }
-            } catch (err) {
-                setError('Failed to load results');
-                console.error('Results error:', err);
-            } finally {
-                setLoading(false);
+              await AsyncStorage.setItem('userLevel', promotionResponse.data.new_level.toString());
+            } catch (storageError) {
+              console.log('Storage error:', storageError);
             }
-        };
+          }
+        } catch (promotionError) {
+          console.log('Level progression check failed:', promotionError);
+        }
+      } else {
+        setError('No results available for this session');
+      }
+    } catch (err) {
+      setError('Failed to load results');
+      console.error('Results error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        fetchResultsAndCheckLevel();
-    }, [sessionId]);
+  fetchResultsAndCheckLevel();
+}, [sessionId]);
 
 
   useEffect(() => {
@@ -280,7 +283,7 @@ const LevelUpModal = () => (
           onPress={() => {
             setLevelUpModal(false);
             // Refresh the profile screen by navigating to it with params
-            navigation.navigate('Profile', { levelUpdated: true });
+            // navigation.navigate('Profile', { levelUpdated: false });
           }}
           activeOpacity={0.8}
         >
@@ -435,7 +438,7 @@ const LevelUpModal = () => (
             >
               <View style={styles.feedbackButtonContent}>
                 <Icon name="feedback" size={24} color="#fff" />
-                <Text style={styles.feedbackButtonText}>Give Feedback</Text>
+                <Text style={styles.feedbackButtonText}>Give 1 Feedback</Text>
               </View>
             </LinearGradient>
           </TouchableOpacity>
@@ -978,7 +981,5 @@ const styles = StyleSheet.create({
             color: '#FFFFFF',
         },
 });
-
-
 
 
