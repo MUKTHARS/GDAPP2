@@ -1126,4 +1126,23 @@ expiredSessionText: {
   marginLeft: 8,
   fontWeight: '500',
 },
+expiredBanner: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: 'rgba(220, 38, 38, 0.2)',
+  paddingHorizontal: 8,
+  paddingVertical: 4,
+  borderRadius: 6,
+  marginBottom: 12,
+  alignSelf: 'flex-start',
+},
+expiredBannerText: {
+  color: '#FCA5A5',
+  fontSize: 12,
+  fontWeight: '600',
+  marginLeft: 4,
+},
+expiredText: {
+  color: '#9CA3AF',
+},
 });

@@ -90,7 +90,7 @@ func SetupStudentRoutes() *http.ServeMux {
 	router.Handle(baseurl+"/session-history", middleware.StudentOnly(
 		http.HandlerFunc(controllers.GetStudentSessionHistory)))
 	
-	// FIXED: Use the correct middleware and function name
+	// Use the correct middleware and function name
 	router.Handle(baseurl+"/level-progression", middleware.StudentOnly(
 		http.HandlerFunc(controllers.CheckLevelProgression)))
 	

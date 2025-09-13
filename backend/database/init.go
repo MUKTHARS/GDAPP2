@@ -117,7 +117,7 @@ func InitDB(db *sql.DB) error {
     session_id VARCHAR(36) NOT NULL,
     old_level INT NOT NULL,
     new_level INT NOT NULL,
-    ranks INT NOT NULL,
+    rankings INT NOT NULL,
     promoted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_promotion (student_id, session_id),
     FOREIGN KEY (student_id) REFERENCES student_users(id),

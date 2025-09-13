@@ -632,6 +632,5 @@ updateReadyStatus: (sessionId, isReady) => api.post('/student/session/ready', {
   }),
   };
 
-  
 
 export default api;

@@ -1490,13 +1490,18 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
 
 
 func updateStudentLevel(sessionID string) error {
+    log.Printf("=== START updateStudentLevel for session %s ===", sessionID)
+    defer log.Printf("=== END updateStudentLevel for session %s ===", sessionID)
+    
     tx, err := database.GetDB().Begin()
     if err != nil {
+        log.Printf("ERROR: Failed to begin transaction: %v", err)
         return fmt.Errorf("failed to begin transaction: %v", err)
     }
     defer tx.Rollback()
 
     // Get all participants with their current levels and final scores
+    log.Printf("Querying student scores for session %s", sessionID)
     rows, err := tx.Query(`
         SELECT 
             sr.student_id,
@@ -1510,6 +1515,7 @@ func updateStudentLevel(sessionID string) error {
         sessionID)
     
     if err != nil {
+        log.Printf("ERROR: Failed to get student scores: %v", err)
         return fmt.Errorf("error getting student scores: %v", err)
     }
     defer rows.Close()
@@ -1524,62 +1530,115 @@ func updateStudentLevel(sessionID string) error {
     for rows.Next() {
         var result StudentResult
         if err := rows.Scan(&result.StudentID, &result.CurrentLevel, &result.FinalScore); err != nil {
+            log.Printf("WARNING: Error scanning row: %v", err)
             continue
         }
         results = append(results, result)
+        log.Printf("Student %s: current_level=%d, final_score=%.2f", 
+            result.StudentID, result.CurrentLevel, result.FinalScore)
     }
+
+    if len(results) == 0 {
+        log.Printf("WARNING: No results found for session %s", sessionID)
+        return tx.Commit()
+    }
+
+    log.Printf("Found %d students with completed surveys", len(results))
 
     // Only promote top 3 students who are NOT already at max level (5)
     promotedCount := 0
     for i, result := range results {
         if promotedCount >= 3 {
+            log.Printf("Stopping promotion - already promoted 3 students")
             break // Only promote top 3
         }
+        
+        log.Printf("Processing rank %d: student %s (current level: %d)", 
+            i+1, result.StudentID, result.CurrentLevel)
         
         // Check if student is eligible for promotion (not at max level)
         if result.CurrentLevel < 5 {
             // Only promote if they're in top 3 positions
             if i < 3 {
-                // Update level by exactly 1 (not current_gd_level + 1 which could be more)
                 newLevel := result.CurrentLevel + 1
                 if newLevel > 5 {
                     newLevel = 5
+                    log.Printf("Capping level at 5 for student %s", result.StudentID)
                 }
                 
-                _, err := tx.Exec(`
+                log.Printf("Promoting student %s from level %d to level %d (rank %d)", 
+                    result.StudentID, result.CurrentLevel, newLevel, i+1)
+                
+                execResult, err := tx.Exec(`
                     UPDATE student_users 
                     SET current_gd_level = ? 
                     WHERE id = ? AND current_gd_level < 5`,
                     newLevel, result.StudentID)
                 
                 if err != nil {
-                    log.Printf("Error updating level for student %s: %v", result.StudentID, err)
+                    log.Printf("ERROR: Failed to update level for student %s: %v", 
+                        result.StudentID, err)
                     continue
                 }
                 
-                // Track the promotion
-                err = trackStudentPromotion(sessionID, result.StudentID, i+1, result.CurrentLevel, newLevel)
+                rowsAffected, err := execResult.RowsAffected()
                 if err != nil {
-                    log.Printf("Error tracking promotion for student %s: %v", result.StudentID, err)
+                    log.Printf("ERROR: Failed to get rows affected for student %s: %v", 
+                        result.StudentID, err)
+                    continue
                 }
                 
-                log.Printf("Promoted student %s from level %d to %d (rank %d)", 
-                    result.StudentID, result.CurrentLevel, newLevel, i+1)
-                promotedCount++
+                if rowsAffected > 0 {
+                    // Track the promotion
+                    err = trackStudentPromotion(sessionID, result.StudentID, i+1, result.CurrentLevel, newLevel)
+                    if err != nil {
+                        log.Printf("ERROR: Failed to track promotion for student %s: %v", 
+                            result.StudentID, err)
+                    }
+                    
+                    log.Printf("SUCCESS: Promoted student %s from level %d to %d (rows affected: %d)", 
+                        result.StudentID, result.CurrentLevel, newLevel, rowsAffected)
+                    promotedCount++
+                } else {
+                    log.Printf("WARNING: No rows affected for student %s - may already be at level 5", 
+                        result.StudentID)
+                }
+            } else {
+                log.Printf("Student %s is rank %d (not in top 3), skipping promotion", 
+                    result.StudentID, i+1)
             }
+        } else {
+            log.Printf("Student %s is already at max level (%d), skipping promotion", 
+                result.StudentID, result.CurrentLevel)
         }
     }
 
-    return tx.Commit()
+    log.Printf("Total students promoted: %d", promotedCount)
+    
+    if err := tx.Commit(); err != nil {
+        log.Printf("ERROR: Failed to commit transaction: %v", err)
+        return err
+    }
+    
+    log.Printf("Transaction committed successfully")
+    return nil
 }
 
+
 func trackStudentPromotion(sessionID, studentID string, rank int, oldLevel, newLevel int) error {
+    log.Printf("Tracking promotion: student=%s, session=%s, rank=%d, old=%d, new=%d",
+        studentID, sessionID, rank, oldLevel, newLevel)
+    
     _, err := database.GetDB().Exec(`
         INSERT INTO student_promotions 
-        (id, student_id, session_id, old_level, new_level, rank, promoted_at)
+        (id, student_id, session_id, old_level, new_level, rankings, promoted_at)
         VALUES (UUID(), ?, ?, ?, ?, ?, NOW())
-        ON DUPLICATE KEY UPDATE new_level = VALUES(new_level), rank = VALUES(rank)
-    `, studentID, sessionID, oldLevel, newLevel, rank)
+        ON DUPLICATE KEY UPDATE new_level = VALUES(new_level), rankings = VALUES(rankings)`,
+        studentID, sessionID, oldLevel, newLevel, rank)
+    
+    if err != nil {
+        log.Printf("ERROR: Failed to track promotion: %v", err)
+    }
     
     return err
 }
@@ -1589,7 +1648,11 @@ func CheckLevelProgression(w http.ResponseWriter, r *http.Request) {
     studentID := r.Context().Value("studentID").(string)
     sessionID := r.URL.Query().Get("session_id")
 
+    log.Printf("=== START CheckLevelProgression for student %s, session %s ===", studentID, sessionID)
+    defer log.Printf("=== END CheckLevelProgression for student %s, session %s ===", studentID, sessionID)
+
     if sessionID == "" {
+        log.Printf("ERROR: session_id is required")
         w.WriteHeader(http.StatusBadRequest)
         json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
         return
@@ -1601,10 +1664,32 @@ func CheckLevelProgression(w http.ResponseWriter, r *http.Request) {
         SELECT current_gd_level FROM student_users WHERE id = ?`, studentID).Scan(&currentLevel)
     
     if err != nil {
+        log.Printf("ERROR: Failed to get current level for student %s: %v", studentID, err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
         return
     }
+
+    log.Printf("Student %s current level: %d", studentID, currentLevel)
+
+var alreadyPromoted bool
+err = database.GetDB().QueryRow(`
+    SELECT EXISTS(
+        SELECT 1 FROM student_promotions 
+        WHERE session_id = ? AND student_id = ?
+    )`, sessionID, studentID).Scan(&alreadyPromoted)
+
+if err != nil {
+    log.Printf("WARNING: Error checking if already promoted: %v", err)
+}
+
+if alreadyPromoted {
+    log.Printf("Student %s already promoted in session %s, skipping", studentID, sessionID)
+    // varpromoted := false
+    // newLevel := currentLevel
+    // Still return the response but without promotion
+}
+
 
     // Check if ALL surveys are completed for this session
     var totalParticipants, completedCount int
@@ -1618,11 +1703,12 @@ func CheckLevelProgression(w http.ResponseWriter, r *http.Request) {
         sessionID).Scan(&totalParticipants, &completedCount)
     
     if err != nil {
-        log.Printf("Error checking survey completion for level progression: %v", err)
-        // Continue with individual check
+        log.Printf("WARNING: Error checking survey completion: %v", err)
         completedCount = 0
         totalParticipants = 0
     }
+
+    log.Printf("Survey completion: %d/%d participants completed", completedCount, totalParticipants)
 
     promoted := false
     var newLevel int = currentLevel
@@ -1630,6 +1716,8 @@ func CheckLevelProgression(w http.ResponseWriter, r *http.Request) {
 
     // Only check ranking if ALL surveys are completed
     if completedCount >= totalParticipants && totalParticipants > 0 {
+        log.Printf("All surveys completed, checking ranking...")
+        
         // Check if student was in top 3 and should be promoted
         err = database.GetDB().QueryRow(`
             SELECT ranking FROM (
@@ -1643,6 +1731,13 @@ func CheckLevelProgression(w http.ResponseWriter, r *http.Request) {
             WHERE student_id = ?`,
             sessionID, studentID).Scan(&rank)
 
+        if err != nil {
+            log.Printf("WARNING: Error getting rank for student %s: %v", studentID, err)
+            rank = 0
+        } else {
+            log.Printf("Student %s rank: %d", studentID, rank)
+        }
+
         // Only promote if in top 3 AND not already at max level AND all surveys completed
         if err == nil && rank <= 3 && rank > 0 && currentLevel < 5 {
             newLevel = currentLevel + 1
@@ -1651,26 +1746,47 @@ func CheckLevelProgression(w http.ResponseWriter, r *http.Request) {
             }
             promoted = true
             
+            log.Printf("Attempting to promote student %s from level %d to level %d", 
+                studentID, currentLevel, newLevel)
+            
             // Update level in database
             result, err := database.GetDB().Exec(`
                 UPDATE student_users 
                 SET current_gd_level = ? 
-                WHERE id = ? `,
+                WHERE id = ? AND current_gd_level < 5`,
                 newLevel, studentID)
             
             if err != nil {
-                log.Printf("Failed to update level for student %s: %v", studentID, err)
+                log.Printf("ERROR: Failed to update level for student %s: %v", studentID, err)
                 promoted = false
                 newLevel = currentLevel
             } else {
                 rowsAffected, _ := result.RowsAffected()
                 promoted = rowsAffected > 0
                 if !promoted {
+                    log.Printf("WARNING: No rows affected for student %s - may already be at level 5", studentID)
                     newLevel = currentLevel
+                } else {
+                    log.Printf("SUCCESS: Updated student %s level to %d (rows affected: %d)", 
+                        studentID, newLevel, rowsAffected)
+                    
+                    // Track the promotion
+                    err = trackStudentPromotion(sessionID, studentID, rank, currentLevel, newLevel)
+                    if err != nil {
+                        log.Printf("ERROR: Failed to track promotion: %v", err)
+                    }
                 }
             }
+        } else {
+            log.Printf("Student not eligible for promotion - rank: %d, current level: %d, error: %v", 
+                rank, currentLevel, err)
         }
+    } else {
+        log.Printf("Surveys not completed yet, skipping promotion check")
     }
+
+    log.Printf("Final result - promoted: %t, old_level: %d, new_level: %d, rank: %d", 
+        promoted, currentLevel, newLevel, rank)
 
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]interface{}{
