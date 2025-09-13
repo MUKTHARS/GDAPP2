@@ -27,7 +27,7 @@ func main() {
 	studentRouter := studentRoutes.SetupStudentRoutes()
 	mainMux.Handle("/api/gd/student/", middleware.EnableCORS(studentRouter))
     
-	mainMux.HandleFunc("/ws/gd-session/", handleWebSocket)
+	// mainMux.HandleFunc("/ws/gd-session/", handleWebSocket)
 	// Default root
 	mainMux.Handle("/", middleware.EnableCORS(http.NotFoundHandler()))
 	

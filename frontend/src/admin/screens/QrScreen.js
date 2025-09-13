@@ -235,67 +235,104 @@ const storeQR = async (qrData, expiry, qrId, isFull = false) => {
   };
 
   // Check if we need to auto-generate new QR
-  const checkAutoGeneration = async () => {
-    // Don't auto-generate if screen is not active
-    if (!isScreenActiveRef.current || isAutoGeneratingRef.current || !currentQRIdRef.current) {
-      return;
-    }
+const checkAutoGeneration = async () => {
+  if (!isScreenActiveRef.current || isAutoGeneratingRef.current || !currentQRIdRef.current) {
+    return;
+  }
 
-    try {
-      // Check current QR status from server
-      const statsResponse = await api.get('/admin/qr/manage', {
-        params: { venue_id: venue.id }
-      });
-      
-      if (statsResponse.data && Array.isArray(statsResponse.data)) {
-        const currentQR = statsResponse.data.find(qr => qr.id === currentQRIdRef.current);
-        if (currentQR) {
-          const isFull = currentQR.current_usage >= currentQR.max_capacity;
-          
-          // Update UI state
-          setQrStats(prev => ({
-            ...prev,
-            currentUsage: currentQR.current_usage,
-            remainingSlots: currentQR.remaining,
-            isFull: isFull
-          }));
-          
-          // Update storage using safe date conversion
-          const safeExpiryISO = safeToISOString(expiryTimeRef.current);
-          await storeQR(qrData, safeExpiryISO, currentQRIdRef.current, isFull);
-          
-          // Auto-generate only if QR is completely full (2/2) and not already generating
-          // AND only if screen is active
-          if (isFull && currentQR.current_usage === 2 && !isAutoGeneratingRef.current && isScreenActiveRef.current) {
-            console.log('QR is completely full (2/2), auto-generating new one...');
-            isAutoGeneratingRef.current = true;
-            await fetchQR(true, true);
-          }
+  try {
+    const statsResponse = await api.get('/admin/qr/manage', {
+      params: { venue_id: venue.id }
+    });
+    
+    if (statsResponse.data && Array.isArray(statsResponse.data)) {
+      const currentQR = statsResponse.data.find(qr => qr.id === currentQRIdRef.current);
+      if (currentQR) {
+        const isFull = currentQR.current_usage >= currentQR.max_capacity;
+        
+        // Update UI state
+        setQrStats(prev => ({
+          ...prev,
+          currentUsage: currentQR.current_usage,
+          remainingSlots: currentQR.remaining,
+          isFull: isFull
+        }));
+        
+        // Update storage
+        const safeExpiryISO = safeToISOString(expiryTimeRef.current);
+        await storeQR(qrData, safeExpiryISO, currentQRIdRef.current, isFull);
+        
+        // Auto-generate only if QR is completely full and not already generating
+        if (isFull && !isAutoGeneratingRef.current && isScreenActiveRef.current) {
+          console.log('QR is full, auto-generating new one...');
+          isAutoGeneratingRef.current = true;
+          await fetchQR(true, true);
         }
       }
-    } catch (error) {
-      console.error('Error checking QR status:', error);
     }
-  };
+  } catch (error) {
+    console.error('Error checking QR status:', error);
+  }
+};
+
+const checkQRStatus = async () => {
+  if (!isScreenActiveRef.current || !currentQRIdRef.current) {
+    return;
+  }
+
+  try {
+    // Get QR management data for this venue
+    const response = await api.get('/admin/qr/manage', {
+      params: { venue_id: venue.id }
+    });
+    
+    if (response.data && Array.isArray(response.data)) {
+      // Find the current QR code
+      const currentQR = response.data.find(qr => qr.id === currentQRIdRef.current);
+      
+      if (currentQR) {
+        const maxCapacity = currentQR.max_capacity || 15;
+        const currentUsage = currentQR.current_usage || 0;
+        const remainingSlots = maxCapacity - currentUsage;
+        const isFull = currentQR.is_full || (remainingSlots === 0);
+        
+        // Update UI state
+        setQrStats(prev => ({
+          ...prev,
+          currentUsage: currentUsage,
+          remainingSlots: remainingSlots,
+          isFull: isFull
+        }));
+        
+        // Update storage
+        const safeExpiryISO = safeToISOString(expiryTimeRef.current);
+        await storeQR(qrData, safeExpiryISO, currentQRIdRef.current, isFull);
+        
+        console.log(`QR Status: ${currentUsage}/${maxCapacity} (${remainingSlots} remaining)`);
+      }
+    }
+  } catch (error) {
+    console.error('Error checking QR status:', error);
+  }
+};
 
   // Initial load
-  useEffect(() => {
-    fetchQR(false, false);
-    
-    // Set up interval for status checks only when screen is active
-    intervalRef.current = setInterval(() => {
-      if (isScreenActiveRef.current) {
-        checkAutoGeneration();
-      }
-    }, 5000); // Check every 5 seconds
+useEffect(() => {
+  fetchQR(false, false);
+  
+  // Set up interval for status checks
+  const statusInterval = setInterval(() => {
+    if (isScreenActiveRef.current) {
+      checkQRStatus(); // Check current QR status
+      checkAutoGeneration(); // Check if need to auto-generate
+    }
+  }, 3000); // Check every 3 seconds
 
-    return () => {
-      // Clean up interval on component unmount
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [venue?.id]);
+  return () => {
+    clearInterval(statusInterval);
+  };
+}, [venue?.id]);
+
 
   return (
     <View style={styles.container}>
@@ -328,27 +365,34 @@ const storeQR = async (qrData, expiry, qrId, isFull = false) => {
             />
           </View>
           <Text style={styles.expiry}>Valid until: {expiryTime}</Text>
-          <View style={styles.capacityInfo}>
-            <Text style={[
-              styles.capacityText,
-              qrStats.isFull && styles.fullText
-            ]}>
-              Usage: {qrStats.currentUsage}/{qrStats.maxCapacity}
-            </Text>
-            <Text style={[
-              styles.capacityText,
-              qrStats.isFull && styles.fullText
-            ]}>
-              Remaining: {qrStats.remainingSlots} slots
-            </Text>
-            {qrStats.isFull && (
-              <View style={styles.fullWarningContainer}>
-                <Text style={styles.fullWarning}>
-                  This QR is full. {qrStats.currentUsage === 15 ? 'New QR generating...' : 'Scanning may fail.'}
-                </Text>
-              </View>
-            )}
-          </View>
+         <View style={styles.capacityInfo}>
+  <Text style={[
+    styles.capacityText,
+    qrStats.isFull && styles.fullText
+  ]}>
+    Scanned: {qrStats.currentUsage} times
+  </Text>
+  <Text style={[
+    styles.capacityText,
+    qrStats.isFull && styles.fullText
+  ]}>
+    Capacity: {qrStats.currentUsage}/{qrStats.maxCapacity}
+  </Text>
+  <Text style={[
+    styles.capacityText,
+    qrStats.isFull && styles.fullText
+  ]}>
+    Remaining: {qrStats.remainingSlots} slots
+  </Text>
+  {qrStats.isFull && (
+    <View style={styles.fullWarningContainer}>
+      <Text style={styles.fullWarning}>
+        This QR is full. {qrStats.currentUsage === qrStats.maxCapacity ? 
+          'New QR generating...' : 'Scanning may fail.'}
+      </Text>
+    </View>
+  )}
+</View>
         </>
       ) : (
         <Text>No QR data available</Text>
