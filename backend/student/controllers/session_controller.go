@@ -1530,7 +1530,6 @@ func updateStudentLevel(sessionID string) error {
     }
 
     // Only promote top 3 students who are NOT already at max level (5)
-    // Each student should only be promoted by ONE level, regardless of their rank
     promotedCount := 0
     for i, result := range results {
         if promotedCount >= 3 {
@@ -1656,7 +1655,7 @@ func CheckLevelProgression(w http.ResponseWriter, r *http.Request) {
             result, err := database.GetDB().Exec(`
                 UPDATE student_users 
                 SET current_gd_level = ? 
-                WHERE id = ? AND current_gd_level < 5`,
+                WHERE id = ? `,
                 newLevel, studentID)
             
             if err != nil {

@@ -440,13 +440,6 @@ WHERE id = NEW.id`,
 ('student1', 'student1@example.com', '$2a$10$xJwL5v5Jz5TZfN5D5M7zOeJz5TZfN5D5M7zOeJz5TZfN5D5M7zOe', 'John Doe', 'CS', 3, TRUE),
 ('student2', 'student2@example.com', '$2a$10$xJwL5v5Jz5TZfN5D5M7zOeJz5TZfN5D5M7zOeJz5TZfN5D5M7zOe', 'Jane Smith', 'ECE', 2, TRUE)
 `,
-
-// Venues
-        `INSERT IGNORE INTO venues (id, name, capacity, qr_secret, created_by) VALUES 
-        ('venue1', 'Table 1-A', 10, 'venue1_secret123', 'admin1'),
-        ('venue2', 'Room 3B', 15, 'venue2_secret456', 'admin1')`,
-
-
     
     }
 

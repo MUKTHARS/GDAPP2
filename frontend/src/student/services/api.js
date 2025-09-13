@@ -421,7 +421,7 @@ submitFeedback: (sessionId, rating, comments) => {
       // Use a small timeout to ensure the response is processed first
       setTimeout(() => {
         // Navigate to home screen
-        navigation.navigate('SessionBooking'); // Or whatever your home screen route is called
+        navigation.navigate('SessionBooking');
       }, 100);
     }
     return response;
