@@ -89,11 +89,12 @@ func SetupStudentRoutes() *http.ServeMux {
 		http.HandlerFunc(controllers.GetReadyStatus)))
 	router.Handle(baseurl+"/session-history", middleware.StudentOnly(
 		http.HandlerFunc(controllers.GetStudentSessionHistory)))
-	
+	router.Handle("/student/venues", middleware.StudentOnly(http.HandlerFunc(controllers.GetVenuesForStudent)))
 	// Use the correct middleware and function name
 	router.Handle(baseurl+"/level-progression", middleware.StudentOnly(
 		http.HandlerFunc(controllers.CheckLevelProgression)))
-	
+	router.Handle(baseurl+"/venues", middleware.StudentOnly(
+    http.HandlerFunc(controllers.GetVenuesForStudent)))
 	router.Handle(baseurl+"/session/check-all-ready", middleware.StudentOnly(
 		http.HandlerFunc(controllers.CheckAllReady)))
 	

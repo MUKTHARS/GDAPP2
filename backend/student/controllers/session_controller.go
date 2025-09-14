@@ -6,14 +6,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"gd/database"
-	"math"
-	"sort"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
-// "strings"
+
+	// "strings"
 	"github.com/google/uuid"
 )
 
@@ -343,27 +345,7 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
 	studentID := r.Context().Value("studentID").(string)
 	log.Printf("JoinSession request for student %s", studentID)
 
-    //     var hasActiveBooking bool
-    // err := database.GetDB().QueryRow(`
-    //     SELECT EXISTS(
-    //         SELECT 1 FROM student_users 
-    //         WHERE id = ? AND current_booking IS NOT NULL
-    //     )`, studentID).Scan(&hasActiveBooking)
-    
-    // if err != nil {
-    //     log.Printf("Error checking active booking: %v", err)
-    //     w.WriteHeader(http.StatusInternalServerError)
-    //     json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-    //     return
-    // }
-
-    // if !hasActiveBooking {
-    //     log.Printf("Student %s has no active booking", studentID)
-    //     w.WriteHeader(http.StatusForbidden)
-    //     json.NewEncoder(w).Encode(map[string]string{"error": "You must book a venue before scanning QR code"})
-    //     return
-    // }
-
+   
 
 	// Parse QR data
 	var qrPayload struct {
@@ -387,6 +369,55 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         log.Printf("Error getting student level: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to verify student level"})
+        return
+    }
+
+
+   var venueTiming struct {
+        SessionTiming   sql.NullString
+        AvailableDays   sql.NullString
+        StartTime       sql.NullString
+        EndTime         sql.NullString
+    }
+    
+     err = database.GetDB().QueryRow(`
+        SELECT session_timing, available_days, start_time, end_time 
+        FROM venues WHERE id = ?`, qrPayload.VenueID).Scan(
+            &venueTiming.SessionTiming, &venueTiming.AvailableDays, 
+            &venueTiming.StartTime, &venueTiming.EndTime)
+    
+    if err != nil {
+        log.Printf("Error getting venue timing: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to verify session timing"})
+        return
+    }
+   sessionTiming := ""
+    if venueTiming.SessionTiming.Valid {
+        sessionTiming = venueTiming.SessionTiming.String
+    }
+    
+    availableDays := ""
+    if venueTiming.AvailableDays.Valid {
+        availableDays = venueTiming.AvailableDays.String
+    }
+    
+    startTime := ""
+    if venueTiming.StartTime.Valid {
+        startTime = venueTiming.StartTime.String
+    }
+    
+    endTime := ""
+    if venueTiming.EndTime.Valid {
+        endTime = venueTiming.EndTime.String
+    }
+
+    if !isWithinSessionTime(sessionTiming, availableDays, startTime, endTime) {
+        log.Printf("Student %s tried to join session outside allowed time", studentID)
+        w.WriteHeader(http.StatusForbidden)
+        json.NewEncoder(w).Encode(map[string]string{
+            "error": "Session is not active at this time. Please join during scheduled session hours.",
+        })
         return
     }
 
@@ -590,6 +621,134 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
 		"status":     "joined",
 		"session_id": sessionID,
 	})
+}
+
+func isWithinSessionTime(sessionTiming, availableDays, startTime, endTime string) bool {
+    // If no timing restrictions are set, allow access
+    if sessionTiming == "" && availableDays == "" && startTime == "" && endTime == "" {
+        return true
+    }
+    
+    now := time.Now()
+    currentTime := now.Format("15:04")
+    currentDay := strings.ToLower(now.Weekday().String()[:3])
+
+    // Parse session timing if available
+    if sessionTiming != "" {
+        parts := strings.Split(sessionTiming, " | ")
+        if len(parts) == 2 {
+            datePart := parts[0]
+            timeRange := parts[1]
+            
+            dateParts := strings.Split(datePart, "/")
+            if len(dateParts) == 3 {
+                day, _ := strconv.Atoi(dateParts[0])
+                month, _ := strconv.Atoi(dateParts[1])
+                year, _ := strconv.Atoi(dateParts[2])
+                
+                sessionDate := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
+                today := time.Now().Truncate(24 * time.Hour)
+                
+                if sessionDate.Equal(today) {
+                    timeParts := strings.Split(timeRange, " - ")
+                    if len(timeParts) == 2 {
+                        startStr := strings.TrimSpace(timeParts[0])
+                        endStr := strings.TrimSpace(timeParts[1])
+                        
+                        start, err1 := parseTime12Hour(startStr)
+                        end, err2 := parseTime12Hour(endStr)
+                        
+                        if err1 == nil && err2 == nil {
+                            current := time.Now()
+                            return current.After(start) && current.Before(end)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback to available_days and start_time/end_time
+    if availableDays != "" {
+        days := strings.Split(strings.ToLower(availableDays), ",")
+        dayAllowed := false
+        for _, day := range days {
+            if strings.TrimSpace(day) == currentDay {
+                dayAllowed = true
+                break
+            }
+        }
+        
+        if !dayAllowed {
+            return false
+        }
+    }
+
+    if startTime != "" && endTime != "" {
+        start, err1 := time.Parse("15:04", startTime)
+        end, err2 := time.Parse("15:04", endTime)
+        
+        if err1 == nil && err2 == nil {
+            current, err := time.Parse("15:04", currentTime)
+            if err == nil {
+                return current.After(start) && current.Before(end)
+            }
+        }
+    }
+
+    return true // Default to allowed if timing validation fails
+}
+
+func parseTime12Hour(timeStr string) (time.Time, error) {
+    layout := "3:04 PM"
+    t, err := time.Parse(layout, timeStr)
+    if err != nil {
+        return time.Time{}, err
+    }
+    
+    now := time.Now()
+    return time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, now.Location()), nil
+}
+
+func GetVenuesForStudent(w http.ResponseWriter, r *http.Request) {
+    rows, err := database.GetDB().Query(`
+        SELECT id, name, session_timing, available_days, start_time, end_time
+        FROM venues WHERE is_active = TRUE`)
+    
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode([]interface{}{})
+        return
+    }
+    defer rows.Close()
+
+    var venues []map[string]interface{}
+    for rows.Next() {
+        var venue struct {
+            ID            string
+            Name          string
+            SessionTiming sql.NullString
+            AvailableDays sql.NullString
+            StartTime     sql.NullString
+            EndTime       sql.NullString
+        }
+        if err := rows.Scan(&venue.ID, &venue.Name, &venue.SessionTiming, 
+                          &venue.AvailableDays, &venue.StartTime, &venue.EndTime); err != nil {
+            continue
+        }
+        
+        venues = append(venues, map[string]interface{}{
+            "id":             venue.ID,
+            "name":           venue.Name,
+            "session_timing": venue.SessionTiming.String,
+            "available_days": venue.AvailableDays.String,
+            "start_time":     venue.StartTime.String,
+            "end_time":       venue.EndTime.String,
+        })
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(venues)
 }
 
 func getSessionParticipantCount(sessionID string) (int, error) {

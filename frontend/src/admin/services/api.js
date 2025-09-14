@@ -45,6 +45,12 @@ api.admin = {
     'Content-Type': 'application/json'
   }
 }),
+deleteVenue: (venueId) => api.delete('/admin/venues', { 
+    params: { id: venueId },
+    validateStatus: function (status) {
+        return status < 500;
+    }
+}),
   createVenue: (data) => api.post('/admin/venues', data),
   getBookings: () => api.get('/admin/bookings', {
     validateStatus: function (status) {
@@ -255,7 +261,11 @@ getSessionFeedbacks: (sessionId, page = 1, limit = 20) => {
   toggleRankingPoints: (id) => api.put('/admin/ranking-points/toggle', null, { 
     params: { id } 
   }),
-    getVenues: () => api.get('/admin/venues'),
+ getVenues: () => api.get('/student/venues', {
+        validateStatus: function (status) {
+            return status < 500;
+        }
+    }),
   getTopParticipants: (params = {}) => api.get('/admin/results/top', { params }),
 };
 

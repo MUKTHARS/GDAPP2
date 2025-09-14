@@ -3,11 +3,13 @@ package controllers
 import (
 	// "database/sql"
 	"encoding/json"
+	"fmt"
 	"gd/admin/models"
 	qr "gd/admin/utils"
 	"gd/database"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -67,6 +69,99 @@ func GetVenues(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(venues)
 }
 
+func DeleteVenue(w http.ResponseWriter, r *http.Request) {
+    venueID := r.URL.Query().Get("id")
+    if venueID == "" {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Venue ID is required"})
+        return
+    }
+
+    // Check if venue is expired (session timing is in the past)
+    var sessionTiming string
+    err := database.GetDB().QueryRow(
+        "SELECT session_timing FROM venues WHERE id = ?",
+        venueID,
+    ).Scan(&sessionTiming)
+
+    if err != nil {
+        log.Printf("Error fetching venue timing: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+
+    isExpired := false
+    if sessionTiming != "" {
+        parts := strings.Split(sessionTiming, " | ")
+        if len(parts) == 2 {
+            datePart := parts[0]
+            // Parse date in DD/MM/YYYY format
+            dateParts := strings.Split(datePart, "/")
+            if len(dateParts) == 3 {
+                day, _ := strconv.Atoi(dateParts[0])
+                month, _ := strconv.Atoi(dateParts[1])
+                year, _ := strconv.Atoi(dateParts[2])
+                
+                venueDate := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
+                if venueDate.Before(time.Now().AddDate(0, 0, -1)) { // Allow 1 day grace period
+                    isExpired = true
+                }
+            }
+        }
+    }
+
+    if !isExpired {
+        // For non-expired venues, check for active sessions
+        var sessionCount int
+        err := database.GetDB().QueryRow(
+            "SELECT COUNT(*) FROM gd_sessions WHERE venue_id = ? AND status IN ('pending', 'active')",
+            venueID,
+        ).Scan(&sessionCount)
+
+        if err != nil {
+            log.Printf("Error checking venue sessions: %v", err)
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+            return
+        }
+
+        if sessionCount > 0 {
+            w.WriteHeader(http.StatusConflict)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Cannot delete venue with active sessions"})
+            return
+        }
+    }
+
+    // Soft delete the venue
+    result, err := database.GetDB().Exec(
+        "UPDATE venues SET is_active = FALSE WHERE id = ?",
+        venueID,
+    )
+
+    if err != nil {
+        log.Printf("Error deleting venue: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to delete venue"})
+        return
+    }
+
+    rowsAffected, _ := result.RowsAffected()
+    if rowsAffected == 0 {
+        w.WriteHeader(http.StatusNotFound)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Venue not found"})
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    if isExpired {
+        json.NewEncoder(w).Encode(map[string]string{"status": "expired_venue_deleted"})
+    } else {
+        json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+    }
+}
+
+// Update the UpdateVenue function to handle table_details
 func UpdateVenue(w http.ResponseWriter, r *http.Request) {
     var venue Venue
     if err := json.NewDecoder(r.Body).Decode(&venue); err != nil {
@@ -174,3 +269,43 @@ func CreateVenue(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(venue)
 }
 
+func CleanupExpiredVenues(w http.ResponseWriter, r *http.Request) {
+    db := database.GetDB()
+    if db == nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database connection error"})
+        return
+    }
+
+    // Delete venues that have no active sessions and are past their session time
+    result, err := db.Exec(`
+        UPDATE venues 
+        SET is_active = FALSE 
+        WHERE is_active = TRUE 
+        AND id NOT IN (
+            SELECT DISTINCT venue_id 
+            FROM gd_sessions 
+            WHERE status IN ('pending', 'active')
+        )
+        AND session_timing != ''
+        AND STR_TO_DATE(
+            SUBSTRING_INDEX(session_timing, ' | ', 1), 
+            '%d/%m/%Y'
+        ) < CURDATE()
+    `)
+
+    if err != nil {
+        log.Printf("Error cleaning up expired venues: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to cleanup expired venues"})
+        return
+    }
+
+    rowsAffected, _ := result.RowsAffected()
+    
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{
+        "status": "cleanup_completed",
+        "venues_removed": fmt.Sprintf("%d", rowsAffected),
+    })
+}

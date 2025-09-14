@@ -5,6 +5,8 @@ import (
 	qr "gd/admin/utils"
 	"gd/database"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +20,8 @@ func GenerateQR(w http.ResponseWriter, r *http.Request) {
         json.NewEncoder(w).Encode(map[string]string{"error": "venue_id parameter is required"})
         return
     }
+
+
 
 adminID := r.Context().Value("userID").(string)
     if adminID == "" {
@@ -167,7 +171,92 @@ adminID := r.Context().Value("userID").(string)
     })
 }
 
+func isWithinSessionTime(sessionTiming, availableDays, startTime, endTime string) bool {
+    now := time.Now()
+    currentTime := now.Format("15:04")
+    currentDay := strings.ToLower(now.Weekday().String()[:3]) // "mon", "tue", etc.
 
+    // Parse session timing if available (DD/MM/YYYY | HH:MM AM/PM - HH:MM AM/PM)
+    if sessionTiming != "" {
+        parts := strings.Split(sessionTiming, " | ")
+        if len(parts) == 2 {
+            datePart := parts[0]
+            timeRange := parts[1]
+            
+            // Parse date
+            dateParts := strings.Split(datePart, "/")
+            if len(dateParts) == 3 {
+                day, _ := strconv.Atoi(dateParts[0])
+                month, _ := strconv.Atoi(dateParts[1])
+                year, _ := strconv.Atoi(dateParts[2])
+                
+                sessionDate := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
+                today := time.Now().Truncate(24 * time.Hour)
+                
+                // Check if session is today
+                if sessionDate.Equal(today) {
+                    // Parse time range
+                    timeParts := strings.Split(timeRange, " - ")
+                    if len(timeParts) == 2 {
+                        startStr := strings.TrimSpace(timeParts[0])
+                        endStr := strings.TrimSpace(timeParts[1])
+                        
+                        start, err1 := parseTime12Hour(startStr)
+                        end, err2 := parseTime12Hour(endStr)
+                        
+                        if err1 == nil && err2 == nil {
+                            current := time.Now()
+                            return current.After(start) && current.Before(end)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback to available_days and start_time/end_time if session_timing is not set
+    if availableDays != "" {
+        days := strings.Split(strings.ToLower(availableDays), ",")
+        dayAllowed := false
+        for _, day := range days {
+            if strings.TrimSpace(day) == currentDay {
+                dayAllowed = true
+                break
+            }
+        }
+        
+        if !dayAllowed {
+            return false
+        }
+    }
+
+    // Check time range
+    if startTime != "" && endTime != "" {
+        start, err1 := time.Parse("15:04", startTime)
+        end, err2 := time.Parse("15:04", endTime)
+        
+        if err1 == nil && err2 == nil {
+            current, err := time.Parse("15:04", currentTime)
+            if err == nil {
+                return current.After(start) && current.Before(end)
+            }
+        }
+    }
+
+    return true // Default to allowed if no timing restrictions
+}
+
+func parseTime12Hour(timeStr string) (time.Time, error) {
+    layout := "3:04 PM"
+    t, err := time.Parse(layout, timeStr)
+    if err != nil {
+        return time.Time{}, err
+    }
+    
+    // Set to today's date
+    now := time.Now()
+    return time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, now.Location()), nil
+}
 
 func IncrementQRUsage(qrID string) error {
     _, err := database.GetDB().Exec(`

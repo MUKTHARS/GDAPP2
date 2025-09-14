@@ -27,18 +27,25 @@ func SetupAdminRoutes() *http.ServeMux {
 	router.Handle(baseurl+"/sessions/bulk", middleware.AdminOnly(http.HandlerFunc(controllers.CreateBulkSessions)))
 
 	// Venue routes - single handler for both GET and POST
-	router.Handle(baseurl+"/venues", middleware.AdminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			controllers.GetVenues(w, r)
-		case http.MethodPost:
-			controllers.CreateVenue(w, r)
-		case http.MethodPut:
-			controllers.UpdateVenue(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})))
+router.Handle(baseurl+"/venues/delete", middleware.AdminOnly(
+    http.HandlerFunc(controllers.DeleteVenue),
+))
+
+// Update the venues route to handle DELETE method
+router.Handle(baseurl+"/venues", middleware.AdminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    switch r.Method {
+    case http.MethodGet:
+        controllers.GetVenues(w, r)
+    case http.MethodPost:
+        controllers.CreateVenue(w, r)
+    case http.MethodPut:
+        controllers.UpdateVenue(w, r)
+    case http.MethodDelete:
+        controllers.DeleteVenue(w, r)
+    default:
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+    }
+})))
 
 	router.Handle(baseurl+"/venues/", middleware.AdminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPut {
