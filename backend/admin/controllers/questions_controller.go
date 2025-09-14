@@ -145,14 +145,7 @@ func CreateQuestion(w http.ResponseWriter, r *http.Request) {
 }
 
 func UpdateQuestion(w http.ResponseWriter, r *http.Request) {
-	questionID := r.URL.Query().Get("id")
-	if questionID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Question ID is required"})
-		return
-	}
-
-	 var req struct {
+    var req struct {
         ID      string   `json:"id"`
         Text    *string  `json:"text"`
         Weight  *float64 `json:"weight"`
@@ -172,75 +165,75 @@ func UpdateQuestion(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-	tx, err := database.GetDB().Begin()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-		return
-	}
-	defer tx.Rollback()
+    tx, err := database.GetDB().Begin()
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+    defer tx.Rollback()
 
-	// Update question fields if provided
-	if req.Text != nil || req.Weight != nil || req.Active != nil {
-		query := "UPDATE survey_questions SET "
-		var args []interface{}
-		
-		if req.Text != nil {
-			query += "question_text = ?, "
-			args = append(args, *req.Text)
-		}
-		if req.Weight != nil {
-			query += "weight = ?, "
-			args = append(args, *req.Weight)
-		}
-		if req.Active != nil {
-			query += "is_active = ?, "
-			args = append(args, *req.Active)
-		}
-		
-		query = query[:len(query)-2] + " WHERE id = ?"
-		args = append(args, questionID)
-		
-		_, err = tx.Exec(query, args...)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update question"})
-			return
-		}
-	}
+    // Update question fields if provided
+    if req.Text != nil || req.Weight != nil || req.Active != nil {
+        query := "UPDATE survey_questions SET "
+        var args []interface{}
+        
+        if req.Text != nil {
+            query += "question_text = ?, "
+            args = append(args, *req.Text)
+        }
+        if req.Weight != nil {
+            query += "weight = ?, "
+            args = append(args, *req.Weight)
+        }
+        if req.Active != nil {
+            query += "is_active = ?, "
+            args = append(args, *req.Active)
+        }
+        
+        query = query[:len(query)-2] + " WHERE id = ?"
+        args = append(args, req.ID) // Use req.ID instead of questionID from URL
+        
+        _, err = tx.Exec(query, args...)
+        if err != nil {
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update question"})
+            return
+        }
+    }
 
-	// Update levels if provided
-	if req.Levels != nil {
-		// First delete existing level mappings
-		_, err = tx.Exec("DELETE FROM question_levels WHERE question_id = ?", questionID)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update levels"})
-			return
-		}
+    // Update levels if provided
+    if req.Levels != nil {
+        // First delete existing level mappings
+        _, err = tx.Exec("DELETE FROM question_levels WHERE question_id = ?", req.ID) // Use req.ID
+        if err != nil {
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update levels"})
+            return
+        }
 
-		// Add new level mappings
-		for _, level := range req.Levels {
-			_, err = tx.Exec(`
-				INSERT INTO question_levels (question_id, level)
-				VALUES (?, ?)`,
-				questionID, level)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update levels"})
-				return
-			}
-		}
-	}
+        // Add new level mappings
+        for _, level := range req.Levels {
+            _, err = tx.Exec(`
+                INSERT INTO question_levels (question_id, level)
+                VALUES (?, ?)`,
+                req.ID, level) // Use req.ID
+            if err != nil {
+                w.WriteHeader(http.StatusInternalServerError)
+                json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update levels"})
+                return
+            }
+        }
+    }
 
-	if err := tx.Commit(); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update question"})
-		return
-	}
+    if err := tx.Commit(); err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update question"})
+        return
+    }
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
 
 func DeleteQuestion(w http.ResponseWriter, r *http.Request) {

@@ -362,15 +362,7 @@ const checkQRStatus = async () => {
         </View>
       )}
       
-      <TouchableOpacity 
-        style={[styles.refreshButton, { marginTop: 10 }]}
-        onPress={() => setShowHistory(true)}
-      >
-        <Icon name="history" size={24} color="#10ac84" />
-        <Text style={[styles.refreshText, { color: '#10ac84' }]}>
-          View QR History
-        </Text>
-      </TouchableOpacity>
+   
       
       {isLoading ? (
         <Text>Loading QR code...</Text>
@@ -425,14 +417,14 @@ const checkQRStatus = async () => {
         <Text>No QR data available</Text>
       )}
 
-      <TouchableOpacity 
+      {/* <TouchableOpacity 
         style={styles.refreshButton}
         onPress={() => fetchQR(false, false)}
         disabled={isLoading}
       >
         <Icon name="refresh" size={24} color="#2e86de" />
         <Text style={styles.refreshText}>Refresh Status</Text>
-      </TouchableOpacity>
+      </TouchableOpacity> */}
 
       <TouchableOpacity 
         style={[styles.refreshButton, { marginTop: 10 }]}
@@ -442,6 +434,16 @@ const checkQRStatus = async () => {
         <Icon name="add" size={24} color="#ff4757" />
         <Text style={[styles.refreshText, { color: '#ff4757' }]}>
           Generate New QR
+        </Text>
+      </TouchableOpacity>
+
+         <TouchableOpacity 
+        style={[styles.refreshButton, { marginTop: 10 }]}
+        onPress={() => setShowHistory(true)}
+      >
+        <Icon name="history" size={24} color="#10ac84" />
+        <Text style={[styles.refreshText, { color: '#10ac84' }]}>
+          View QR History
         </Text>
       </TouchableOpacity>
 

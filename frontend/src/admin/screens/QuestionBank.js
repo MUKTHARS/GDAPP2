@@ -89,6 +89,12 @@ const fetchQuestions = async () => {
   };
 
  const handleSaveQuestion = async () => {
+   console.log('Saving question:', {
+    editingId,
+    text: newQuestion.text,
+    weight: newQuestion.weight,
+    levels: newQuestion.levels
+  });
   if (!newQuestion.text || newQuestion.levels.length === 0) {
     alert('Question text and at least one level are required');
     return;
@@ -107,7 +113,7 @@ const fetchQuestions = async () => {
       weight: weight,
       levels: newQuestion.levels
     };
-
+ console.log('Sending data to server:', questionData);
     let response;
     if (editingId) {
       response = await api.put('/admin/questions', {
@@ -117,7 +123,7 @@ const fetchQuestions = async () => {
     } else {
       response = await api.post('/admin/questions', questionData);
     }
-
+console.log('Server response:', response.data);
     if (response.data && response.data.status === 'success') {
       setNewQuestion({ text: '', weight: '1.0', levels: [] });
       setEditingId(null);
