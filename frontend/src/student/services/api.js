@@ -8,17 +8,27 @@ const api = axios.create({
     : 'https://learnathon.bitsathy.ac.in/api/gd',
 });
 
-api.interceptors.request.use(async (config) => {
+
+const getToken = async () => {
   try {
     const token = await AsyncStorage.getItem('token');
+    return token ? token.replace(/['"]+/g, '').trim() : null;
+  } catch (error) {
+    console.error('Token error:', error);
+    return null;
+  }
+};
+
+api.interceptors.request.use(async (config) => {
+  try {
+    const token = await getToken(); 
     console.log('Using token:', token ? 'yes' : 'no');
     if (token) {
-      const cleanToken = token.replace(/['"]+/g, '').trim();
-      config.headers.Authorization = `Bearer ${cleanToken}`;
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   } catch (error) {
-    console.error('Token error:', error);
+    console.error('Request error:', error);
     return config;
   }
 }, error => {

@@ -38,37 +38,44 @@ export default function TopParticipantsScreen() {
   }, [selectedLevel]);
 
   const renderSessionItem = ({ item }) => (
-    <View style={styles.sessionCard}>
-      <Text style={styles.sessionTitle}>
-        Session {item.session_id.substring(0, 8)} - Level {item.session_level}
-      </Text>
-      <Text style={styles.sessionDate}>
-        {new Date(item.session_date).toLocaleDateString()}
-      </Text>
-      
-      {item.top_participants && item.top_participants.length > 0 ? (
-        item.top_participants.map((participant, index) => (
-          <View key={participant.id} style={[
-            styles.participantCard,
-            index === 0 && styles.firstPlace,
-            index === 1 && styles.secondPlace,
-            index === 2 && styles.thirdPlace,
-          ]}>
-            <Text style={styles.rank}>#{index + 1}</Text>
-            <View style={styles.participantInfo}>
-              <Text style={styles.name}>{participant.name}</Text>
-              <Text style={styles.details}>
-                Student Level: {participant.student_level} | Score: {participant.total_score.toFixed(1)}
-              </Text>
-              <Text style={styles.avgScore}>Avg: {participant.avg_score.toFixed(1)}</Text>
-            </View>
+  <View style={styles.sessionCard}>
+    <Text style={styles.sessionTitle}>
+      Session: {item.session_id.substring(0, 8)}
+    </Text>
+    <Text style={styles.sessionDetails}>
+      Level {item.session_level} | {item.venue_name || 'No Venue'}
+    </Text>
+    <Text style={styles.sessionDate}>
+      {new Date(item.session_date).toLocaleDateString()} at{' '}
+      {new Date(item.session_date).toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      })}
+    </Text>
+    
+    {item.top_participants && item.top_participants.length > 0 ? (
+      item.top_participants.map((participant, index) => (
+        <View key={participant.id} style={[
+          styles.participantCard,
+          index === 0 && styles.firstPlace,
+          index === 1 && styles.secondPlace,
+          index === 2 && styles.thirdPlace,
+        ]}>
+          <Text style={styles.rank}>#{index + 1}</Text>
+          <View style={styles.participantInfo}>
+            <Text style={styles.name}>{participant.name}</Text>
+            <Text style={styles.details}>
+              Student Level: {participant.student_level} | Score: {participant.total_score.toFixed(1)}
+            </Text>
+            <Text style={styles.avgScore}>Avg: {participant.avg_score.toFixed(1)}</Text>
           </View>
-        ))
-      ) : (
-        <Text style={styles.noParticipants}>No participants found</Text>
-      )}
-    </View>
-  );
+        </View>
+      ))
+    ) : (
+      <Text style={styles.noParticipants}>No participants found</Text>
+    )}
+  </View>
+);
 
   return (
     <View style={styles.container}>
@@ -280,5 +287,17 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 20,
+  },
+   sessionDetails: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 4,
+    fontWeight: '500',
+  },
+  sessionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+    color: colors.textPrimary,
   },
 });

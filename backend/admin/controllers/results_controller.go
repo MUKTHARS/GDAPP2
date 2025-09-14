@@ -27,7 +27,7 @@ func GetTopParticipants(w http.ResponseWriter, r *http.Request) {
         }
     }
 
-    // Query to get top performers from each session, grouped by session and level
+    // Updated query to include venue name and properly format time
     query := `
         SELECT 
             sr.session_id,
@@ -38,19 +38,23 @@ func GetTopParticipants(w http.ResponseWriter, r *http.Request) {
             COUNT(DISTINCT sr.session_id) as session_count,
             SUM(sr.score) as total_score,
             AVG(sr.score) as avg_score,
-            s.start_time as session_date
+            s.start_time as session_date,
+            v.name as venue_name,
+            DATE_FORMAT(s.start_time, '%Y-%m-%d %H:%i:%s') as formatted_time
         FROM survey_results sr
         JOIN student_users su ON sr.responder_id = su.id
         JOIN gd_sessions s ON sr.session_id = s.id
+        LEFT JOIN venues v ON s.venue_id = v.id
         WHERE su.is_active = TRUE AND sr.is_completed = TRUE
     `
 
     if level > 0 {
-        query += " AND s.level = " + strconv.Itoa(level)  // Filter by session level
+        query += " AND s.level = " + strconv.Itoa(level)
     }
 
     query += `
-        GROUP BY sr.session_id, sr.responder_id, su.full_name, su.current_gd_level, s.level, s.start_time
+        GROUP BY sr.session_id, sr.responder_id, su.full_name, su.current_gd_level, 
+                 s.level, s.start_time, v.name
         ORDER BY s.start_time DESC, total_score DESC
     `
 
@@ -73,6 +77,8 @@ func GetTopParticipants(w http.ResponseWriter, r *http.Request) {
         TotalScore    float64   `json:"total_score"`
         AvgScore      float64   `json:"avg_score"`
         SessionDate   time.Time `json:"session_date"`
+        VenueName     string    `json:"venue_name"` // Add venue name field
+        FormattedTime string    `json:"formatted_time"` // Add formatted time field
     }
 
     var allResults []TopParticipant
@@ -80,7 +86,8 @@ func GetTopParticipants(w http.ResponseWriter, r *http.Request) {
         var r TopParticipant
         var dateStr string
         if err := rows.Scan(&r.SessionID, &r.SessionLevel, &r.ID, &r.Name, 
-            &r.StudentLevel, &r.SessionCount, &r.TotalScore, &r.AvgScore, &dateStr); err != nil {
+            &r.StudentLevel, &r.SessionCount, &r.TotalScore, &r.AvgScore, 
+            &dateStr, &r.VenueName, &r.FormattedTime); err != nil {
             log.Printf("Error scanning result: %v", err)
             continue
         }
@@ -105,6 +112,8 @@ func GetTopParticipants(w http.ResponseWriter, r *http.Request) {
             sessions[sessionID]["session_id"] = sessionID
             sessions[sessionID]["session_level"] = result.SessionLevel
             sessions[sessionID]["session_date"] = result.SessionDate
+            sessions[sessionID]["venue_name"] = result.VenueName // Add venue name
+            sessions[sessionID]["formatted_time"] = result.FormattedTime // Add formatted time
             sessions[sessionID]["top_participants"] = []TopParticipant{}
         }
         

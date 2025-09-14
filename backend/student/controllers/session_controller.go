@@ -629,8 +629,8 @@ func isWithinSessionTime(sessionTiming, availableDays, startTime, endTime string
         return true
     }
     
-    now := time.Now()
-    currentTime := now.Format("15:04")
+    now := time.Now().Local() // Use local time
+    // currentTime := now.Format("15:04")
     currentDay := strings.ToLower(now.Weekday().String()[:3])
 
     // Parse session timing if available
@@ -647,7 +647,7 @@ func isWithinSessionTime(sessionTiming, availableDays, startTime, endTime string
                 year, _ := strconv.Atoi(dateParts[2])
                 
                 sessionDate := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
-                today := time.Now().Truncate(24 * time.Hour)
+                today := time.Now().Truncate(24 * time.Hour).Local()
                 
                 if sessionDate.Equal(today) {
                     timeParts := strings.Split(timeRange, " - ")
@@ -659,10 +659,13 @@ func isWithinSessionTime(sessionTiming, availableDays, startTime, endTime string
                         end, err2 := parseTime12Hour(endStr)
                         
                         if err1 == nil && err2 == nil {
-                            current := time.Now()
+                            current := time.Now().Local()
                             return current.After(start) && current.Before(end)
                         }
                     }
+                } else {
+                    // Session is not today, so not active
+                    return false
                 }
             }
         }
@@ -689,10 +692,11 @@ func isWithinSessionTime(sessionTiming, availableDays, startTime, endTime string
         end, err2 := time.Parse("15:04", endTime)
         
         if err1 == nil && err2 == nil {
-            current, err := time.Parse("15:04", currentTime)
-            if err == nil {
-                return current.After(start) && current.Before(end)
-            }
+            // Convert to today's date with local timezone
+            startToday := time.Date(now.Year(), now.Month(), now.Day(), start.Hour(), start.Minute(), 0, 0, time.Local)
+            endToday := time.Date(now.Year(), now.Month(), now.Day(), end.Hour(), end.Minute(), 0, 0, time.Local)
+            
+            return now.After(startToday) && now.Before(endToday)
         }
     }
 

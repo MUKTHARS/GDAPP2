@@ -58,9 +58,10 @@ const checkActiveBooking = async () => {
             const booking = bookingsResponse.data[0];
             setCurrentBooking(booking);
             
-            // Get venue details including timing
+            // Get venue details including timing - handle gracefully
             try {
-                const venuesResponse = await api.student.getSessions(studentLevel);
+                // Use the venues endpoint that actually exists
+                const venuesResponse = await api.get('/student/venues');
                 if (venuesResponse.data && Array.isArray(venuesResponse.data)) {
                     const venue = venuesResponse.data.find(v => v.id === booking.venue_id);
                     
@@ -71,17 +72,20 @@ const checkActiveBooking = async () => {
                         if (!isWithinSessionTime(venue.session_timing)) {
                             setError('Session is not active at this time. Please come back during scheduled hours.');
                             setIsActive(false);
+                            return;
                         }
-                    } else {
-                        // If no timing info, allow scanning
-                        setSessionTiming(null);
                     }
                 }
             } catch (error) {
-                console.log('Could not fetch venue timing:', error);
+                console.log('Could not fetch venue timing, proceeding without validation:', error);
                 // Continue without timing validation
                 setSessionTiming(null);
             }
+            
+            // If we get here, timing is valid or couldn't be verified
+            setIsActive(true);
+            setError(null);
+            
         } else {
             setError('You must book a venue before scanning QR code');
             setIsActive(false);
@@ -95,14 +99,14 @@ const checkActiveBooking = async () => {
 
 
 const isWithinSessionTime = (timing) => {
-    if (!timing) return true; // No timing restriction
+    if (!timing || timing.trim() === '') return true; // No timing restriction
     
     try {
         const parts = timing.split(' | ');
         if (parts.length !== 2) return true;
         
-        const datePart = parts[0];
-        const timeRange = parts[1];
+        const datePart = parts[0].trim();
+        const timeRange = parts[1].trim();
         
         // Parse date (DD/MM/YYYY)
         const [day, month, year] = datePart.split('/').map(Number);
@@ -123,12 +127,15 @@ const isWithinSessionTime = (timing) => {
         const now = new Date();
         
         const parseTime12Hour = (timeStr) => {
-            const [time, modifier] = timeStr.split(' ');
+            const timeParts = timeStr.split(' ');
+            if (timeParts.length < 2) return null;
+            
+            const [time, modifier] = timeParts;
             let [hours, minutes] = time.split(':').map(Number);
             
-            if (modifier === 'PM' && hours !== 12) {
+            if (modifier.toUpperCase() === 'PM' && hours !== 12) {
                 hours += 12;
-            } else if (modifier === 'AM' && hours === 12) {
+            } else if (modifier.toUpperCase() === 'AM' && hours === 12) {
                 hours = 0;
             }
             
@@ -139,6 +146,10 @@ const isWithinSessionTime = (timing) => {
         
         const startTime = parseTime12Hour(startStr);
         const endTime = parseTime12Hour(endStr);
+        
+        if (!startTime || !endTime) {
+            return true; // If parsing fails, allow access
+        }
         
         return now >= startTime && now <= endTime;
         
