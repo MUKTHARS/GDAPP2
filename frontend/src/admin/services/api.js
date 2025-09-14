@@ -261,6 +261,54 @@ getSessionFeedbacks: (sessionId, page = 1, limit = 20) => {
   toggleRankingPoints: (id) => api.put('/admin/ranking-points/toggle', null, { 
     params: { id } 
   }),
+
+getQRHistory: (venueId) => api.get('/admin/qr/history', { 
+  params: { 
+    venue_id: venueId 
+  },
+  validateStatus: function (status) {
+    return status >= 200 && status < 500;
+  },
+  timeout: 15000
+}).then(response => {
+  // Handle different response formats
+  if (response.data && response.data.success !== undefined) {
+    // New format with success field
+    return response;
+  } else if (Array.isArray(response.data)) {
+    // Old format - array directly
+    return {
+      ...response,
+      data: {
+        success: true,
+        data: response.data,
+        count: response.data.length
+      }
+    };
+  } else {
+    // Unknown format, convert to expected format
+    return {
+      ...response,
+      data: {
+        success: true,
+        data: response.data || [],
+        count: Array.isArray(response.data) ? response.data.length : 0
+      }
+    };
+  }
+}).catch(error => {
+  console.error('QR History API Error:', error);
+  // Return a consistent format even on error
+  return {
+    data: {
+      success: false,
+      error: error.message,
+      data: [],
+      count: 0
+    }
+  };
+}),
+
  getVenues: () => api.get('/student/venues', {
         validateStatus: function (status) {
             return status < 500;

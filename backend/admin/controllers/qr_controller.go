@@ -44,15 +44,15 @@ adminID := r.Context().Value("userID").(string)
         }
         
         err := database.GetDB().QueryRow(`
-            SELECT id, qr_data, expires_at, max_capacity, current_usage
-            FROM venue_qr_codes 
-            WHERE venue_id = ? AND created_by = ? AND is_active = TRUE 
-            AND expires_at > NOW()
-            AND current_usage < max_capacity
-            ORDER BY created_at DESC LIMIT 1`,
-            venueID, adminID, // Added adminID filter
-        ).Scan(&availableQR.ID, &availableQR.QRData, &availableQR.ExpiresAt, 
-              &availableQR.MaxCapacity, &availableQR.CurrentUsage)
+    SELECT id, qr_data, expires_at, max_capacity, current_usage
+    FROM venue_qr_codes 
+    WHERE venue_id = ? AND created_by = ? 
+    AND expires_at > NOW()
+    AND current_usage < max_capacity
+    ORDER BY created_at DESC LIMIT 1`,
+    venueID, adminID,
+).Scan(&availableQR.ID, &availableQR.QRData, &availableQR.ExpiresAt, 
+      &availableQR.MaxCapacity, &availableQR.CurrentUsage)
 
        if err == nil {
             // Found available QR code - return it
@@ -170,6 +170,92 @@ adminID := r.Context().Value("userID").(string)
         "is_new":         true, // Indicate this is a new QR
     })
 }
+
+
+func GetQRHistory(w http.ResponseWriter, r *http.Request) {
+    venueID := r.URL.Query().Get("venue_id")
+    if venueID == "" {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "success": false,
+            "error":   "venue_id parameter is required",
+            "data":    []interface{}{},
+        })
+        return
+    }
+
+    adminID := r.Context().Value("userID").(string)
+    if adminID == "" {
+        w.WriteHeader(http.StatusUnauthorized)
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "success": false,
+            "error":   "Admin authentication required",
+            "data":    []interface{}{},
+        })
+        return
+    }
+
+    // Get all QR codes for this venue (including inactive ones)
+    rows, err := database.GetDB().Query(`
+        SELECT id, qr_data, expires_at, is_active, max_capacity, current_usage, qr_group_id, created_at
+        FROM venue_qr_codes 
+        WHERE venue_id = ? AND created_by = ?
+        ORDER BY created_at DESC`,
+        venueID, adminID)
+    
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "success": false,
+            "error":   "Database error: " + err.Error(),
+            "data":    []interface{}{},
+        })
+        return
+    }
+    defer rows.Close()
+
+    var qrCodes []map[string]interface{}
+    for rows.Next() {
+        var qr struct {
+            ID          string
+            QRData      string
+            ExpiresAt   time.Time
+            IsActive    bool
+            MaxCapacity int
+            CurrentUsage int
+            QRGroupID   string
+            CreatedAt   time.Time
+        }
+        
+        if err := rows.Scan(&qr.ID, &qr.QRData, &qr.ExpiresAt, &qr.IsActive, 
+                          &qr.MaxCapacity, &qr.CurrentUsage, &qr.QRGroupID, &qr.CreatedAt); err != nil {
+            continue
+        }
+
+        qrCodes = append(qrCodes, map[string]interface{}{
+            "id":            qr.ID,
+            "qr_data":       qr.QRData,
+            "expires_at":    qr.ExpiresAt.Format(time.RFC3339),
+            "is_active":     qr.IsActive,
+            "max_capacity":  qr.MaxCapacity,
+            "current_usage": qr.CurrentUsage,
+            "remaining":     qr.MaxCapacity - qr.CurrentUsage,
+            "is_full":       qr.CurrentUsage >= qr.MaxCapacity,
+            "is_expired":    time.Now().After(qr.ExpiresAt),
+            "qr_group_id":   qr.QRGroupID,
+            "created_at":    qr.CreatedAt.Format(time.RFC3339),
+        })
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "success": true,
+        "data":    qrCodes,
+        "count":   len(qrCodes),
+    })
+}
+
+
 
 func isWithinSessionTime(sessionTiming, availableDays, startTime, endTime string) bool {
     now := time.Now()

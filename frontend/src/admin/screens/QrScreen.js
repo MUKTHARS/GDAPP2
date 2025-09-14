@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Button, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Button, Alert, Modal } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import QRCode from 'react-native-qrcode-svg';
 import api from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import QrCarousel from '../components/QrCarousel';
 
 export default function QrScreen({ route, navigation }) {
   const [qrData, setQrData] = useState(null);
@@ -18,6 +19,7 @@ export default function QrScreen({ route, navigation }) {
     isNew: false,
     isFull: false
   });
+  const [showHistory, setShowHistory] = useState(false);
 
   // Use refs to track state without causing re-renders
   const isAutoGeneratingRef = useRef(false);
@@ -80,35 +82,43 @@ export default function QrScreen({ route, navigation }) {
   const { venue } = route.params;
 
   // Get stored QR data for this venue
-const getStoredQR = async () => {
-  try {
-    const authData = await AsyncStorage.getItem('admin_auth_data');
-    if (authData) {
-      const { user_id } = JSON.parse(authData);
-      const storedData = await AsyncStorage.getItem(`qr_${venue.id}_${user_id}`);
-      if (storedData) {
-        const { qrData, expiry, qrId, isFull } = JSON.parse(storedData);
-        // Return stored QR regardless of fullness for display
-        if (new Date(expiry) > new Date()) {
-          return { qrData, expiry, qrId, isFull };
+  const getStoredQR = async () => {
+    try {
+      const authData = await AsyncStorage.getItem('admin_auth_data');
+      if (authData) {
+        const { user_id } = JSON.parse(authData);
+        const storedData = await AsyncStorage.getItem(`qr_${venue.id}_${user_id}`);
+        if (storedData) {
+          const { qrData, expiry, qrId, isFull } = JSON.parse(storedData);
+          // Return stored QR regardless of fullness for display
+          if (new Date(expiry) > new Date()) {
+            return { qrData, expiry, qrId, isFull };
+          }
         }
       }
+      return null;
+    } catch (error) {
+      console.error('Error getting stored QR:', error);
+      return null;
     }
-    return null;
-  } catch (error) {
-    console.error('Error getting stored QR:', error);
-    return null;
-  }
-};
+  };
 
 const storeQR = async (qrData, expiry, qrId, isFull = false) => {
   try {
     const authData = await AsyncStorage.getItem('admin_auth_data');
     if (authData) {
       const { user_id } = JSON.parse(authData);
+      
+      // Ensure expiry is a valid date string
+      let safeExpiry = expiry;
+      if (typeof expiry === 'string' && !expiry.includes('T')) {
+        // If it's just a time string, convert to full date
+        safeExpiry = safeToISOString(expiry);
+      }
+      
       await AsyncStorage.setItem(`qr_${venue.id}_${user_id}`, JSON.stringify({
         qrData,
-        expiry,
+        expiry: safeExpiry,
         qrId,
         isFull
       }));
@@ -119,20 +129,28 @@ const storeQR = async (qrData, expiry, qrId, isFull = false) => {
 };
 
   // Safe date conversion function to prevent "Date value out of bounds" error
-  const safeToISOString = (dateString) => {
-    try {
-      const date = new Date(dateString);
-      // Check if date is valid
-      if (isNaN(date.getTime())) {
-        console.warn('Invalid date string:', dateString);
-        return new Date().toISOString(); // Return current date as fallback
-      }
-      return date.toISOString();
-    } catch (error) {
-      console.error('Error converting date to ISO string:', error);
+const safeToISOString = (dateString) => {
+  try {
+    // Handle time-only strings like "7:36:52 PM" or invalid dates
+    if (typeof dateString === 'string' && 
+        (dateString.match(/^\d{1,2}:\d{2}:\d{2}\s?[AP]M$/) || 
+         dateString.includes('PM') || dateString.includes('AM'))) {
+      // Return current date as fallback for time-only strings
+      return new Date().toISOString();
+    }
+    
+    const date = new Date(dateString);
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.warn('Invalid date string:', dateString);
       return new Date().toISOString(); // Return current date as fallback
     }
-  };
+    return date.toISOString();
+  } catch (error) {
+    console.error('Error converting date to ISO string:', error);
+    return new Date().toISOString(); // Return current date as fallback
+  }
+};
 
   const fetchQR = async (forceNew = false, isAutoGenerate = false) => {
     try {
@@ -235,45 +253,45 @@ const storeQR = async (qrData, expiry, qrId, isFull = false) => {
   };
 
   // Check if we need to auto-generate new QR
-const checkAutoGeneration = async () => {
-  if (!isScreenActiveRef.current || isAutoGeneratingRef.current || !currentQRIdRef.current) {
-    return;
-  }
+  const checkAutoGeneration = async () => {
+    if (!isScreenActiveRef.current || isAutoGeneratingRef.current || !currentQRIdRef.current) {
+      return;
+    }
 
-  try {
-    const statsResponse = await api.get('/admin/qr/manage', {
-      params: { venue_id: venue.id }
-    });
-    
-    if (statsResponse.data && Array.isArray(statsResponse.data)) {
-      const currentQR = statsResponse.data.find(qr => qr.id === currentQRIdRef.current);
-      if (currentQR) {
-        const isFull = currentQR.current_usage >= currentQR.max_capacity;
-        
-        // Update UI state
-        setQrStats(prev => ({
-          ...prev,
-          currentUsage: currentQR.current_usage,
-          remainingSlots: currentQR.remaining,
-          isFull: isFull
-        }));
-        
-        // Update storage
-        const safeExpiryISO = safeToISOString(expiryTimeRef.current);
-        await storeQR(qrData, safeExpiryISO, currentQRIdRef.current, isFull);
-        
-        // Auto-generate only if QR is completely full and not already generating
-        if (isFull && !isAutoGeneratingRef.current && isScreenActiveRef.current) {
-          console.log('QR is full, auto-generating new one...');
-          isAutoGeneratingRef.current = true;
-          await fetchQR(true, true);
+    try {
+      const statsResponse = await api.get('/admin/qr/manage', {
+        params: { venue_id: venue.id }
+      });
+      
+      if (statsResponse.data && Array.isArray(statsResponse.data)) {
+        const currentQR = statsResponse.data.find(qr => qr.id === currentQRIdRef.current);
+        if (currentQR) {
+          const isFull = currentQR.current_usage >= currentQR.max_capacity;
+          
+          // Update UI state
+          setQrStats(prev => ({
+            ...prev,
+            currentUsage: currentQR.current_usage,
+            remainingSlots: currentQR.remaining,
+            isFull: isFull
+          }));
+          
+          // Update storage
+          const safeExpiryISO = safeToISOString(expiryTimeRef.current);
+          await storeQR(qrData, safeExpiryISO, currentQRIdRef.current, isFull);
+          
+          // Auto-generate only if QR is completely full and not already generating
+          if (isFull && !isAutoGeneratingRef.current && isScreenActiveRef.current) {
+            console.log('QR is full, auto-generating new one...');
+            isAutoGeneratingRef.current = true;
+            await fetchQR(true, true);
+          }
         }
       }
+    } catch (error) {
+      console.error('Error checking QR status:', error);
     }
-  } catch (error) {
-    console.error('Error checking QR status:', error);
-  }
-};
+  };
 
 const checkQRStatus = async () => {
   if (!isScreenActiveRef.current || !currentQRIdRef.current) {
@@ -304,7 +322,7 @@ const checkQRStatus = async () => {
           isFull: isFull
         }));
         
-        // Update storage
+        // Update storage with proper date handling
         const safeExpiryISO = safeToISOString(expiryTimeRef.current);
         await storeQR(qrData, safeExpiryISO, currentQRIdRef.current, isFull);
         
@@ -317,22 +335,21 @@ const checkQRStatus = async () => {
 };
 
   // Initial load
-useEffect(() => {
-  fetchQR(false, false);
-  
-  // Set up interval for status checks
-  const statusInterval = setInterval(() => {
-    if (isScreenActiveRef.current) {
-      checkQRStatus(); // Check current QR status
-      checkAutoGeneration(); // Check if need to auto-generate
-    }
-  }, 3000); // Check every 3 seconds
+  useEffect(() => {
+    fetchQR(false, false);
+    
+    // Set up interval for status checks
+    const statusInterval = setInterval(() => {
+      if (isScreenActiveRef.current) {
+        checkQRStatus(); // Check current QR status
+        checkAutoGeneration(); // Check if need to auto-generate
+      }
+    }, 3000); // Check every 3 seconds
 
-  return () => {
-    clearInterval(statusInterval);
-  };
-}, [venue?.id]);
-
+    return () => {
+      clearInterval(statusInterval);
+    };
+  }, [venue?.id]);
 
   return (
     <View style={styles.container}>
@@ -344,7 +361,17 @@ useEffect(() => {
           <Text style={styles.newBadgeText}>NEW QR CODE</Text>
         </View>
       )}
-   
+      
+      <TouchableOpacity 
+        style={[styles.refreshButton, { marginTop: 10 }]}
+        onPress={() => setShowHistory(true)}
+      >
+        <Icon name="history" size={24} color="#10ac84" />
+        <Text style={[styles.refreshText, { color: '#10ac84' }]}>
+          View QR History
+        </Text>
+      </TouchableOpacity>
+      
       {isLoading ? (
         <Text>Loading QR code...</Text>
       ) : error ? (
@@ -365,34 +392,34 @@ useEffect(() => {
             />
           </View>
           <Text style={styles.expiry}>Valid until: {expiryTime}</Text>
-         <View style={styles.capacityInfo}>
-  <Text style={[
-    styles.capacityText,
-    qrStats.isFull && styles.fullText
-  ]}>
-    Scanned: {qrStats.currentUsage} times
-  </Text>
-  <Text style={[
-    styles.capacityText,
-    qrStats.isFull && styles.fullText
-  ]}>
-    Capacity: {qrStats.currentUsage}/{qrStats.maxCapacity}
-  </Text>
-  <Text style={[
-    styles.capacityText,
-    qrStats.isFull && styles.fullText
-  ]}>
-    Remaining: {qrStats.remainingSlots} slots
-  </Text>
-  {qrStats.isFull && (
-    <View style={styles.fullWarningContainer}>
-      <Text style={styles.fullWarning}>
-        This QR is full. {qrStats.currentUsage === qrStats.maxCapacity ? 
-          'New QR generating...' : 'Scanning may fail.'}
-      </Text>
-    </View>
-  )}
-</View>
+          <View style={styles.capacityInfo}>
+            <Text style={[
+              styles.capacityText,
+              qrStats.isFull && styles.fullText
+            ]}>
+              Scanned: {qrStats.currentUsage} times
+            </Text>
+            <Text style={[
+              styles.capacityText,
+              qrStats.isFull && styles.fullText
+            ]}>
+              Capacity: {qrStats.currentUsage}/{qrStats.maxCapacity}
+            </Text>
+            <Text style={[
+              styles.capacityText,
+              qrStats.isFull && styles.fullText
+            ]}>
+              Remaining: {qrStats.remainingSlots} slots
+            </Text>
+            {qrStats.isFull && (
+              <View style={styles.fullWarningContainer}>
+                <Text style={styles.fullWarning}>
+                  This QR is full. {qrStats.currentUsage === qrStats.maxCapacity ? 
+                    'New QR generating...' : 'Scanning may fail.'}
+                </Text>
+              </View>
+            )}
+          </View>
         </>
       ) : (
         <Text>No QR data available</Text>
@@ -417,6 +444,17 @@ useEffect(() => {
           Generate New QR
         </Text>
       </TouchableOpacity>
+
+      <Modal
+  visible={showHistory}
+  animationType="slide"
+  onRequestClose={() => setShowHistory(false)}
+>
+  <QrCarousel 
+    venue={venue} 
+    onClose={() => setShowHistory(false)} 
+  />
+</Modal>
     </View>
   );
 }
@@ -424,97 +462,78 @@ useEffect(() => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: 'center',
     padding: 20,
     backgroundColor: '#fff',
   },
   venueName: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 5,
+    marginBottom: 10,
+    textAlign: 'center',
   },
   capacity: {
     fontSize: 16,
-    color: '#666',
     marginBottom: 20,
+    textAlign: 'center',
+    color: '#666',
   },
   newBadge: {
     backgroundColor: '#4CAF50',
-    padding: 8,
-    borderRadius: 12,
+    padding: 5,
+    borderRadius: 5,
     marginBottom: 10,
+    alignSelf: 'center',
   },
   newBadgeText: {
     color: 'white',
     fontWeight: 'bold',
-    fontSize: 12,
   },
   qrContainer: {
+    alignItems: 'center',
     marginVertical: 20,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 10,
-    backgroundColor: '#f9f9f9',
   },
   expiry: {
-    fontSize: 14,
-    color: '#888',
+    fontSize: 16,
+    textAlign: 'center',
     marginBottom: 10,
-    fontWeight: '500',
   },
   capacityInfo: {
     marginBottom: 20,
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    padding: 15,
-    borderRadius: 10,
-    width: '100%',
   },
   capacityText: {
     fontSize: 16,
-    color: '#555',
     marginBottom: 5,
-    fontWeight: '600',
   },
   fullText: {
-    color: 'red',
+    color: '#ff4757',
     fontWeight: 'bold',
   },
   fullWarningContainer: {
-    alignItems: 'center',
-    marginTop: 10,
+    backgroundColor: '#ffebee',
     padding: 10,
-    backgroundColor: '#fff5f5',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ffe6e6',
+    borderRadius: 5,
+    marginTop: 10,
   },
   fullWarning: {
-    color: '#e53e3e',
-    fontSize: 14,
+    color: '#ff4757',
     textAlign: 'center',
-    fontWeight: '500',
   },
   refreshButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#f1f8ff',
-    borderRadius: 8,
-    marginTop: 10,
+    justifyContent: 'center',
+    padding: 10,
+    backgroundColor: '#f1f2f6',
+    borderRadius: 5,
   },
   refreshText: {
     marginLeft: 10,
-    color: '#2e86de',
     fontSize: 16,
-    fontWeight: '600',
   },
   error: {
     color: 'red',
-    marginVertical: 20,
     textAlign: 'center',
-    fontWeight: '500',
-  }
+    marginBottom: 20,
+  },
 });
-

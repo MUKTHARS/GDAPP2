@@ -31,6 +31,9 @@ router.Handle(baseurl+"/venues/delete", middleware.AdminOnly(
     http.HandlerFunc(controllers.DeleteVenue),
 ))
 
+router.Handle(baseurl+"/qr/history", middleware.AdminOnly(
+    http.HandlerFunc(controllers.GetQRHistory)))
+
 // Update the venues route to handle DELETE method
 router.Handle(baseurl+"/venues", middleware.AdminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
     switch r.Method {
