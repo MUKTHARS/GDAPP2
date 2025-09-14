@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/json"
+	"fmt"
 	qr "gd/admin/utils"
 	"gd/database"
 	"net/http"
@@ -195,15 +196,19 @@ func GetQRHistory(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Get all QR codes for this venue (including inactive ones)
+    // Debug logging
+    fmt.Printf("GetQRHistory - venueID: %s, adminID: %s\n", venueID, adminID)
+
+    // Modified query: Remove created_by filter and handle expires_at as string first
     rows, err := database.GetDB().Query(`
-        SELECT id, qr_data, expires_at, is_active, max_capacity, current_usage, qr_group_id, created_at
+        SELECT id, qr_data, expires_at, is_active, max_capacity, current_usage, qr_group_id, created_at, created_by
         FROM venue_qr_codes 
-        WHERE venue_id = ? AND created_by = ?
+        WHERE venue_id = ?
         ORDER BY created_at DESC`,
-        venueID, adminID)
+        venueID)
     
     if err != nil {
+        fmt.Printf("Database error: %v\n", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]interface{}{
             "success": false,
@@ -219,33 +224,66 @@ func GetQRHistory(w http.ResponseWriter, r *http.Request) {
         var qr struct {
             ID          string
             QRData      string
-            ExpiresAt   time.Time
+            ExpiresAt   []byte  // Change to []byte to handle the raw database value
             IsActive    bool
             MaxCapacity int
             CurrentUsage int
             QRGroupID   string
-            CreatedAt   time.Time
+            CreatedAt   []byte  // Change to []byte for created_at as well
+            CreatedBy   string
         }
         
+        // Scan into byte arrays first
         if err := rows.Scan(&qr.ID, &qr.QRData, &qr.ExpiresAt, &qr.IsActive, 
-                          &qr.MaxCapacity, &qr.CurrentUsage, &qr.QRGroupID, &qr.CreatedAt); err != nil {
+                          &qr.MaxCapacity, &qr.CurrentUsage, &qr.QRGroupID, &qr.CreatedAt, &qr.CreatedBy); err != nil {
+            fmt.Printf("Row scan error: %v\n", err)
             continue
+        }
+
+        // Convert byte arrays to time.Time objects
+        expiresAtStr := string(qr.ExpiresAt)
+        createdAtStr := string(qr.CreatedAt)
+        
+        var expiresAtTime time.Time
+        var createdAtTime time.Time
+        
+        // Parse expires_at - try multiple formats
+        if t, err := time.Parse("2006-01-02 15:04:05", expiresAtStr); err == nil {
+            expiresAtTime = t
+        } else if t, err := time.Parse(time.RFC3339, expiresAtStr); err == nil {
+            expiresAtTime = t
+        } else {
+            fmt.Printf("Could not parse expires_at: %s\n", expiresAtStr)
+            expiresAtTime = time.Now() // fallback
+        }
+        
+        // Parse created_at - try multiple formats
+        if t, err := time.Parse("2006-01-02 15:04:05", createdAtStr); err == nil {
+            createdAtTime = t
+        } else if t, err := time.Parse(time.RFC3339, createdAtStr); err == nil {
+            createdAtTime = t
+        } else {
+            fmt.Printf("Could not parse created_at: %s\n", createdAtStr)
+            createdAtTime = time.Now() // fallback
         }
 
         qrCodes = append(qrCodes, map[string]interface{}{
             "id":            qr.ID,
             "qr_data":       qr.QRData,
-            "expires_at":    qr.ExpiresAt.Format(time.RFC3339),
+            "expires_at":    expiresAtTime.Format(time.RFC3339),
             "is_active":     qr.IsActive,
             "max_capacity":  qr.MaxCapacity,
             "current_usage": qr.CurrentUsage,
             "remaining":     qr.MaxCapacity - qr.CurrentUsage,
             "is_full":       qr.CurrentUsage >= qr.MaxCapacity,
-            "is_expired":    time.Now().After(qr.ExpiresAt),
+            "is_expired":    time.Now().After(expiresAtTime),
             "qr_group_id":   qr.QRGroupID,
-            "created_at":    qr.CreatedAt.Format(time.RFC3339),
+            "created_at":    createdAtTime.Format(time.RFC3339),
+            "created_by":    qr.CreatedBy,
         })
     }
+
+    fmt.Printf("Found %d QR codes for venue %s\n", len(qrCodes), venueID)
 
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]interface{}{
