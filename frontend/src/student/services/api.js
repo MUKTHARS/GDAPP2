@@ -216,33 +216,27 @@ checkLevelProgression: (sessionId) => {
   return api.get('/student/level-progression', {
     params: { session_id: sessionId },
     validateStatus: function (status) {
-      return true; // Accept all status codes
+      return true;
     },
     transformResponse: [
       function (data) {
         try {
-          if (!data || typeof data !== 'string' || data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
-            console.log('Received HTML response instead of JSON for level progression');
-            return {
-              promoted: false,
-              old_level: 1,
-              new_level: 1,
-              rank: 0,
-              session_id: sessionId,
-              student_id: ''
-            };
-          }
-          
-          const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-          
-          return {
-            promoted: parsed.promoted || false,
-            old_level: parsed.old_level || 1,
-            new_level: parsed.new_level || 1,
-            rank: parsed.rank || 0,
-            session_id: parsed.session_id || sessionId,
-            student_id: parsed.student_id || ''
+          // Always get the current level from AsyncStorage or make a fresh API call
+          const getCurrentLevel = async () => {
+            try {
+              // Option 1: Get level from profile API (more reliable)
+              const profileResponse = await api.student.getProfile();
+              return profileResponse.data.current_gd_level || 1;
+            } catch (error) {
+              // Option 2: Fallback to AsyncStorage
+              const storedLevel = await AsyncStorage.getItem('userLevel');
+              return storedLevel ? parseInt(storedLevel) : 1;
+            }
           };
+          
+          // This would need to be handled differently since we can't use async in transformResponse
+          // Better to handle this in the component itself
+          return data;
         } catch (e) {
           console.error('Level progression parsing error:', e);
           return {
@@ -256,33 +250,6 @@ checkLevelProgression: (sessionId) => {
         }
       }
     ]
-  }).then(response => {
-    if (response.status >= 400) {
-      console.log(`Level progression API returned status ${response.status}`);
-      return {
-        data: {
-          promoted: false,
-          old_level: 1,
-          new_level: 1,
-          rank: 0,
-          session_id: sessionId,
-          student_id: ''
-        }
-      };
-    }
-    return response;
-  }).catch(error => {
-    console.error('Level progression API error:', error);
-    return {
-      data: {
-        promoted: false,
-        old_level: 1,
-        new_level: 1,
-        rank: 0,
-        session_id: sessionId,
-        student_id: ''
-      }
-    };
   });
 },
 

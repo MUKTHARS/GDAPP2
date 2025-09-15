@@ -1134,41 +1134,41 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    if answeredQuestionsCount >= totalQuestions {
-        log.Printf("All questions completed, calculating averages for session %s", req.SessionID)
+if answeredQuestionsCount >= totalQuestions {
+    log.Printf("All questions completed, calculating averages for session %s", req.SessionID)
+    
+    // Get all question IDs for this session
+    var questionIDs []string
+    rows, err := database.GetDB().Query(`
+        SELECT DISTINCT question_id 
+        FROM survey_results 
+        WHERE session_id = ? AND is_completed = 1`,
+        req.SessionID)
+    if err != nil {
+        log.Printf("Error getting question IDs: %v", err)
+    } else {
+        defer rows.Close()
+        for rows.Next() {
+            var questionID string
+            if err := rows.Scan(&questionID); err != nil {
+                continue
+            }
+            questionIDs = append(questionIDs, questionID)
+        }
         
-        // Get all question IDs for this session
-        var questionIDs []string
-        rows, err := database.GetDB().Query(`
-            SELECT DISTINCT question_id 
-            FROM survey_results 
-            WHERE session_id = ? AND is_completed = 1`,
-            req.SessionID)
-        if err != nil {
-            log.Printf("Error getting question IDs: %v", err)
-        } else {
-            defer rows.Close()
-            for rows.Next() {
-                var questionID string
-                if err := rows.Scan(&questionID); err != nil {
-                    continue
-                }
-                questionIDs = append(questionIDs, questionID)
-            }
-            
-            // Calculate averages for each question
-            for _, questionID := range questionIDs {
-                if err := calculateQuestionAverages(req.SessionID, questionID); err != nil {
-                    log.Printf("Error calculating averages for question %s: %v", questionID, err)
-                }
-            }
-            
-            // Now calculate penalties for biased ratings
-            if err := calculatePenalties(req.SessionID); err != nil {
-                log.Printf("Error calculating penalties: %v", err)
+        // Calculate averages for each question FIRST
+        for _, questionID := range questionIDs {
+            if err := calculateQuestionAverages(req.SessionID, questionID); err != nil {
+                log.Printf("Error calculating averages for question %s: %v", questionID, err)
             }
         }
+        
+        // THEN calculate penalties
+        if err := calculatePenalties(req.SessionID); err != nil {
+            log.Printf("Error calculating penalties: %v", err)
+        }
     }
+}
 
     log.Printf("Successfully processed survey submission for student %s in session %s",
         studentID, req.SessionID)
@@ -1233,6 +1233,31 @@ func calculatePenalties(sessionID string) error {
     }
     defer tx.Rollback()
 
+     var questionIDs []string
+    rows, err := tx.Query(`
+        SELECT DISTINCT question_id 
+        FROM survey_results 
+        WHERE session_id = ? AND is_completed = 1`,
+        sessionID)
+    if err != nil {
+        return fmt.Errorf("error getting question IDs: %v", err)
+    }
+    defer rows.Close()
+    
+  for rows.Next() {
+        var questionID string
+        if err := rows.Scan(&questionID); err != nil {
+            continue
+        }
+        questionIDs = append(questionIDs, questionID)
+        
+        // Calculate averages for this question
+        if err := calculateQuestionAveragesInTransaction(tx, sessionID, questionID); err != nil {
+            log.Printf("Error calculating averages for question %s: %v", questionID, err)
+        }
+    }
+
+
     // Check if penalties already calculated
     var penaltiesCalculated bool
     err = tx.QueryRow(`
@@ -1252,25 +1277,7 @@ func calculatePenalties(sessionID string) error {
 
     // First, calculate MEDIAN scores instead of averages to reduce outlier impact
     // Get all question IDs for this session
-    var questionIDs []string
-    rows, err := tx.Query(`
-        SELECT DISTINCT question_id 
-        FROM survey_results 
-        WHERE session_id = ? AND is_completed = 1`,
-        sessionID)
-    if err != nil {
-        return fmt.Errorf("error getting question IDs: %v", err)
-    }
-    defer rows.Close()
-    
-    for rows.Next() {
-        var questionID string
-        if err := rows.Scan(&questionID); err != nil {
-            continue
-        }
-        questionIDs = append(questionIDs, questionID)
-    }
-
+  
     // Calculate median score for each student per question
     for _, questionID := range questionIDs {
         if err := calculateQuestionMedians(tx, sessionID, questionID); err != nil {
@@ -1356,6 +1363,65 @@ func calculatePenalties(sessionID string) error {
         processedCount, penaltyCount)
     return tx.Commit()
 }
+
+func calculateQuestionAveragesInTransaction(tx *sql.Tx, sessionID, questionID string) error {
+    // Get all scores for this question, excluding self-ratings
+    rows, err := tx.Query(`
+        SELECT student_id, responder_id, score 
+        FROM survey_results 
+        WHERE session_id = ? AND question_id = ? AND responder_id != student_id
+        AND is_completed = 1`,
+        sessionID, questionID)
+    if err != nil {
+        return err
+    }
+    defer rows.Close()
+
+    type Rating struct {
+        StudentID   string
+        ResponderID string
+        Score       float64
+    }
+    
+    var ratings []Rating
+    for rows.Next() {
+        var r Rating
+        if err := rows.Scan(&r.StudentID, &r.ResponderID, &r.Score); err != nil {
+            continue
+        }
+        ratings = append(ratings, r)
+    }
+
+    // Calculate average for each student
+    studentTotals := make(map[string]float64)
+    studentCounts := make(map[string]int)
+    
+    for _, rating := range ratings {
+        studentTotals[rating.StudentID] += rating.Score
+        studentCounts[rating.StudentID]++
+    }
+
+    // Update average scores in database
+    for studentID, total := range studentTotals {
+        count := studentCounts[studentID]
+        if count > 0 {
+            average := total / float64(count)
+            
+            _, err := tx.Exec(`
+                UPDATE survey_results 
+                SET average_score = ?
+                WHERE session_id = ? AND question_id = ? AND student_id = ?
+                AND is_completed = 1`,
+                average, sessionID, questionID, studentID)
+            if err != nil {
+                return err
+            }
+        }
+    }
+
+    return nil
+}
+
 
 func calculateQuestionMedians(tx *sql.Tx, sessionID, questionID string) error {
     // Get all scores for this question, excluding self-ratings
@@ -1485,7 +1551,7 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     sessionID := r.URL.Query().Get("session_id")
     studentID := r.Context().Value("studentID").(string)
 
-    // Verify student is part of this session
+    // Verify student is part of this session - use a more inclusive check
     var isParticipant bool
     err := database.GetDB().QueryRow(`
         SELECT EXISTS(
@@ -1507,49 +1573,7 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    var totalParticipants, completedCount int
-    err = database.GetDB().QueryRow(`
-        SELECT COUNT(DISTINCT sp.student_id),
-               COUNT(DISTINCT sc.student_id)
-        FROM session_participants sp
-        LEFT JOIN survey_completion sc ON sp.session_id = sc.session_id AND sp.student_id = sc.student_id
-        WHERE sp.session_id = ? AND sp.is_dummy = FALSE`,
-        sessionID).Scan(&totalParticipants, &completedCount)
-    
-    if err != nil {
-        log.Printf("Error checking survey completion: %v", err)
-    }
-
-    // Only calculate penalties if all surveys are completed and penalties not calculated yet
-    if completedCount >= totalParticipants && totalParticipants > 0 {
-        var penaltiesCalculated bool
-        err = database.GetDB().QueryRow(`
-            SELECT EXISTS(
-                SELECT 1 FROM survey_results 
-                WHERE session_id = ? AND penalty_calculated = TRUE
-                LIMIT 1
-            )`, sessionID).Scan(&penaltiesCalculated)
-        
-        if err == nil && !penaltiesCalculated {
-            log.Printf("Calculating penalties for completed session %s", sessionID)
-            if err := calculatePenalties(sessionID); err != nil {
-                log.Printf("Warning: Could not calculate penalties: %v", err)
-            }
-            
-            if err := updateStudentLevel(sessionID); err != nil {
-                log.Printf("Warning: Could not update student levels: %v", err)
-            }
-            if err := clearCompletedBookings(sessionID); err != nil {
-                log.Printf("Warning: Could not clear completed bookings: %v", err)
-            }
-
-            if err := clearSessionReadyStatus(sessionID); err != nil {
-                log.Printf("Warning: Could not clear session ready status: %v", err)
-            }
-        }
-    }
-
-    // Get all participants in this session (including the current student) with photo_url
+    // Get ALL participants in this session (not just those with phase tracking)
     participants := make(map[string]struct {
         Name      string
         PhotoURL  string
@@ -1590,6 +1614,8 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         }
     }
 
+    log.Printf("Found %d participants for session %s", len(participants), sessionID)
+
     // Create a map to store scores for each student
     studentScores := make(map[string]*struct {
         TotalScore          float64
@@ -1599,6 +1625,7 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         TotalPenalty        float64
         BiasedQuestions     int
         IncompleteQuestions int
+        FinalScore          float64  // Add this field
     })
     
     // Initialize all participants with zero scores
@@ -1611,20 +1638,21 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
             TotalPenalty        float64
             BiasedQuestions     int
             IncompleteQuestions int
+            FinalScore          float64
         }{}
     }
 
-     rows, err = database.GetDB().Query(`
+    // Get raw scores and penalties for each student
+    rows, err = database.GetDB().Query(`
         SELECT 
-            responder_id, 
-            SUM(score) as total_score,
-            SUM(CASE WHEN deviation >= 2.0 THEN penalty_points ELSE 0 END) as bias_penalty,
-            SUM(CASE WHEN deviation < 2.0 AND penalty_points > 0 THEN penalty_points ELSE 0 END) as incomplete_penalty,
+            student_id,
+            SUM(weighted_score) as total_score,
+            SUM(penalty_points) as total_penalty,
             COUNT(CASE WHEN deviation >= 2.0 AND is_biased THEN 1 END) as biased_questions,
             COUNT(CASE WHEN deviation < 2.0 AND penalty_points > 0 THEN 1 END) as incomplete_questions
         FROM survey_results 
-        WHERE session_id = ?  -- REMOVED: AND is_current_session = 1
-        GROUP BY responder_id`, sessionID)  // ← Only this session
+        WHERE session_id = ? AND is_completed = 1
+        GROUP BY student_id`, sessionID)
     
     if err != nil {
         log.Printf("Error getting survey responses: %v", err)
@@ -1635,30 +1663,29 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     defer rows.Close()
     
     for rows.Next() {
-        var responderID string
-        var totalScore, biasPenalty, incompletePenalty float64
+        var studentID string
+        var totalScore, totalPenalty float64
         var biasedQuestions, incompleteQuestions int
         
-        if err := rows.Scan(&responderID, &totalScore, &biasPenalty, &incompletePenalty, &biasedQuestions, &incompleteQuestions); err != nil {
+        if err := rows.Scan(&studentID, &totalScore, &totalPenalty, &biasedQuestions, &incompleteQuestions); err != nil {
             log.Printf("Error scanning survey results: %v", err)
             continue
         }
         
-        if studentData, exists := studentScores[responderID]; exists {
+        if studentData, exists := studentScores[studentID]; exists {
             studentData.TotalScore = totalScore
-            studentData.BiasPenalty = biasPenalty
-            studentData.IncompletePenalty = incompletePenalty
-            studentData.TotalPenalty = biasPenalty + incompletePenalty
+            studentData.TotalPenalty = totalPenalty
+            studentData.FinalScore = totalScore - totalPenalty  // Calculate final score properly
             studentData.BiasedQuestions = biasedQuestions
             studentData.IncompleteQuestions = incompleteQuestions
         }
     }
 
-    // Get first place counts separately - this should be for the STUDENT (who received the ranking)
+    // Get first place counts
     rows, err = database.GetDB().Query(`
         SELECT student_id, COUNT(*) as first_places
         FROM survey_results 
-        WHERE session_id = ? AND ranks = 1  -- REMOVED: AND is_current_session = 1
+        WHERE session_id = ? AND ranks = 1 AND is_completed = 1
         GROUP BY student_id`, sessionID)
     
     if err != nil {
@@ -1694,7 +1721,6 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     
     var sortedResults []StudentResult
     for id, data := range studentScores {
-        finalScore := data.TotalScore - data.TotalPenalty
         participant := participants[id]
         sortedResults = append(sortedResults, StudentResult{
             ID:                  id,
@@ -1704,7 +1730,7 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
             BiasPenalty:         data.BiasPenalty,
             IncompletePenalty:   data.IncompletePenalty,
             TotalPenalty:        data.TotalPenalty,
-            FinalScore:          finalScore,
+            FinalScore:          data.FinalScore,  // Use the calculated final score
             FirstPlaces:         data.FirstPlaces,
             BiasedQuestions:     data.BiasedQuestions,
             IncompleteQuestions: data.IncompleteQuestions,
@@ -1730,19 +1756,284 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
             "bias_penalty":         fmt.Sprintf("%.2f", r.BiasPenalty),
             "incomplete_penalty":   fmt.Sprintf("%.2f", r.IncompletePenalty),
             "penalty_points":       fmt.Sprintf("%.2f", r.TotalPenalty),
-            "final_score":          fmt.Sprintf("%.2f", r.FinalScore),
+            "final_score":          fmt.Sprintf("%.2f", r.FinalScore),  // This should now be different
             "first_places":         r.FirstPlaces,
             "biased_questions":     r.BiasedQuestions,
             "incomplete_questions": r.IncompleteQuestions,
         })
     }
 
+    log.Printf("Returning %d results for session %s", len(response), sessionID)
+    
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]interface{}{
         "results":    response,
         "session_id": sessionID,
     })
 }
+
+// func GetResults(w http.ResponseWriter, r *http.Request) {
+//     sessionID := r.URL.Query().Get("session_id")
+//     studentID := r.Context().Value("studentID").(string)
+
+//     // Verify student is part of this session
+//     var isParticipant bool
+//     err := database.GetDB().QueryRow(`
+//         SELECT EXISTS(
+//             SELECT 1 FROM session_participants 
+//             WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
+//         )`, sessionID, studentID).Scan(&isParticipant)
+    
+//     if err != nil {
+//         log.Printf("Database error checking participant: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         return
+//     }
+
+//     if !isParticipant {
+//         log.Printf("Student %s not authorized for session %s", studentID, sessionID)
+//         w.WriteHeader(http.StatusForbidden)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized to view these results"})
+//         return
+//     }
+
+//     var totalParticipants, completedCount int
+//     err = database.GetDB().QueryRow(`
+//         SELECT COUNT(DISTINCT sp.student_id),
+//                COUNT(DISTINCT sc.student_id)
+//         FROM session_participants sp
+//         LEFT JOIN survey_completion sc ON sp.session_id = sc.session_id AND sp.student_id = sc.student_id
+//         WHERE sp.session_id = ? AND sp.is_dummy = FALSE`,
+//         sessionID).Scan(&totalParticipants, &completedCount)
+    
+//     if err != nil {
+//         log.Printf("Error checking survey completion: %v", err)
+//     }
+
+//     // Only calculate penalties if all surveys are completed and penalties not calculated yet
+//     if completedCount >= totalParticipants && totalParticipants > 0 {
+//         var penaltiesCalculated bool
+//         err = database.GetDB().QueryRow(`
+//             SELECT EXISTS(
+//                 SELECT 1 FROM survey_results 
+//                 WHERE session_id = ? AND penalty_calculated = TRUE
+//                 LIMIT 1
+//             )`, sessionID).Scan(&penaltiesCalculated)
+        
+//         if err == nil && !penaltiesCalculated {
+//             log.Printf("Calculating penalties for completed session %s", sessionID)
+//             if err := calculatePenalties(sessionID); err != nil {
+//                 log.Printf("Warning: Could not calculate penalties: %v", err)
+//             }
+            
+//             if err := updateStudentLevel(sessionID); err != nil {
+//                 log.Printf("Warning: Could not update student levels: %v", err)
+//             }
+//             if err := clearCompletedBookings(sessionID); err != nil {
+//                 log.Printf("Warning: Could not clear completed bookings: %v", err)
+//             }
+
+//             if err := clearSessionReadyStatus(sessionID); err != nil {
+//                 log.Printf("Warning: Could not clear session ready status: %v", err)
+//             }
+//         }
+//     }
+
+//     // Get all participants in this session (including the current student) with photo_url
+//     participants := make(map[string]struct {
+//         Name      string
+//         PhotoURL  string
+//     })
+    
+//     rows, err := database.GetDB().Query(`
+//         SELECT su.id, su.full_name, COALESCE(su.photo_url, '') as photo_url
+//         FROM student_users su
+//         JOIN session_participants sp ON su.id = sp.student_id
+//         WHERE sp.session_id = ? AND sp.is_dummy = FALSE`, 
+//         sessionID)
+    
+//     if err != nil {
+//         log.Printf("Error getting participants: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         return
+//     }
+//     defer rows.Close()
+    
+//     for rows.Next() {
+//         var id, name, photoURL string
+//         if err := rows.Scan(&id, &name, &photoURL); err != nil {
+//             continue
+//         }
+        
+//         // Use default avatar if no photo URL
+//         if photoURL == "" {
+//             photoURL = "https://ui-avatars.com/api/?name=" + url.QueryEscape(name) + "&background=random&color=fff"
+//         }
+        
+//         participants[id] = struct {
+//             Name      string
+//             PhotoURL  string
+//         }{
+//             Name:     name,
+//             PhotoURL: photoURL,
+//         }
+//     }
+
+//     // Create a map to store scores for each student
+//     studentScores := make(map[string]*struct {
+//         TotalScore          float64
+//         FirstPlaces         int
+//         BiasPenalty         float64
+//         IncompletePenalty   float64
+//         TotalPenalty        float64
+//         BiasedQuestions     int
+//         IncompleteQuestions int
+//     })
+    
+//     // Initialize all participants with zero scores
+//     for id := range participants {
+//         studentScores[id] = &struct {
+//             TotalScore          float64
+//             FirstPlaces         int
+//             BiasPenalty         float64
+//             IncompletePenalty   float64
+//             TotalPenalty        float64
+//             BiasedQuestions     int
+//             IncompleteQuestions int
+//         }{}
+//     }
+
+//      rows, err = database.GetDB().Query(`
+//         SELECT 
+//             responder_id, 
+//             SUM(score) as total_score,
+//             SUM(CASE WHEN deviation >= 2.0 THEN penalty_points ELSE 0 END) as bias_penalty,
+//             SUM(CASE WHEN deviation < 2.0 AND penalty_points > 0 THEN penalty_points ELSE 0 END) as incomplete_penalty,
+//             COUNT(CASE WHEN deviation >= 2.0 AND is_biased THEN 1 END) as biased_questions,
+//             COUNT(CASE WHEN deviation < 2.0 AND penalty_points > 0 THEN 1 END) as incomplete_questions
+//         FROM survey_results 
+//         WHERE session_id = ?  -- REMOVED: AND is_current_session = 1
+//         GROUP BY responder_id`, sessionID)  // ← Only this session
+    
+//     if err != nil {
+//         log.Printf("Error getting survey responses: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         return
+//     }
+//     defer rows.Close()
+    
+//     for rows.Next() {
+//         var responderID string
+//         var totalScore, biasPenalty, incompletePenalty float64
+//         var biasedQuestions, incompleteQuestions int
+        
+//         if err := rows.Scan(&responderID, &totalScore, &biasPenalty, &incompletePenalty, &biasedQuestions, &incompleteQuestions); err != nil {
+//             log.Printf("Error scanning survey results: %v", err)
+//             continue
+//         }
+        
+//         if studentData, exists := studentScores[responderID]; exists {
+//             studentData.TotalScore = totalScore
+//             studentData.BiasPenalty = biasPenalty
+//             studentData.IncompletePenalty = incompletePenalty
+//             studentData.TotalPenalty = biasPenalty + incompletePenalty
+//             studentData.BiasedQuestions = biasedQuestions
+//             studentData.IncompleteQuestions = incompleteQuestions
+//         }
+//     }
+
+//     // Get first place counts separately - this should be for the STUDENT (who received the ranking)
+//     rows, err = database.GetDB().Query(`
+//         SELECT student_id, COUNT(*) as first_places
+//         FROM survey_results 
+//         WHERE session_id = ? AND ranks = 1  -- REMOVED: AND is_current_session = 1
+//         GROUP BY student_id`, sessionID)
+    
+//     if err != nil {
+//         log.Printf("Error getting first places: %v", err)
+//     } else {
+//         defer rows.Close()
+//         for rows.Next() {
+//             var studentID string
+//             var firstPlaces int
+//             if err := rows.Scan(&studentID, &firstPlaces); err != nil {
+//                 continue
+//             }
+//             if studentData, exists := studentScores[studentID]; exists {
+//                 studentData.FirstPlaces = firstPlaces
+//             }
+//         }
+//     }
+
+//     // Prepare results for sorting
+//     type StudentResult struct {
+//         ID                  string
+//         Name                string
+//         PhotoURL            string
+//         TotalScore          float64
+//         BiasPenalty         float64
+//         IncompletePenalty   float64
+//         TotalPenalty        float64
+//         FinalScore          float64
+//         FirstPlaces         int
+//         BiasedQuestions     int
+//         IncompleteQuestions int
+//     }
+    
+//     var sortedResults []StudentResult
+//     for id, data := range studentScores {
+//         finalScore := data.TotalScore - data.TotalPenalty
+//         participant := participants[id]
+//         sortedResults = append(sortedResults, StudentResult{
+//             ID:                  id,
+//             Name:                participant.Name,
+//             PhotoURL:            participant.PhotoURL,
+//             TotalScore:          data.TotalScore,
+//             BiasPenalty:         data.BiasPenalty,
+//             IncompletePenalty:   data.IncompletePenalty,
+//             TotalPenalty:        data.TotalPenalty,
+//             FinalScore:          finalScore,
+//             FirstPlaces:         data.FirstPlaces,
+//             BiasedQuestions:     data.BiasedQuestions,
+//             IncompleteQuestions: data.IncompleteQuestions,
+//         })
+//     }
+
+//     // Sort results by final score (descending)
+//     sort.Slice(sortedResults, func(i, j int) bool {
+//         if sortedResults[i].FinalScore != sortedResults[j].FinalScore {
+//             return sortedResults[i].FinalScore > sortedResults[j].FinalScore
+//         }
+//         return sortedResults[i].FirstPlaces > sortedResults[j].FirstPlaces
+//     })
+
+//     // Prepare response
+//     var response []map[string]interface{}
+//     for _, r := range sortedResults {
+//         response = append(response, map[string]interface{}{
+//             "student_id":           r.ID,
+//             "name":                 r.Name,
+//             "photo_url":            r.PhotoURL,
+//             "total_score":          fmt.Sprintf("%.2f", r.TotalScore),
+//             "bias_penalty":         fmt.Sprintf("%.2f", r.BiasPenalty),
+//             "incomplete_penalty":   fmt.Sprintf("%.2f", r.IncompletePenalty),
+//             "penalty_points":       fmt.Sprintf("%.2f", r.TotalPenalty),
+//             "final_score":          fmt.Sprintf("%.2f", r.FinalScore),
+//             "first_places":         r.FirstPlaces,
+//             "biased_questions":     r.BiasedQuestions,
+//             "incomplete_questions": r.IncompleteQuestions,
+//         })
+//     }
+
+//     w.Header().Set("Content-Type", "application/json")
+//     json.NewEncoder(w).Encode(map[string]interface{}{
+//         "results":    response,
+//         "session_id": sessionID,
+//     })
+// }
 
 
 func updateStudentLevel(sessionID string) error {
@@ -2665,93 +2956,174 @@ func GetUserBookings(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(bookings)
 }
 
+
+
 func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+    w.Header().Set("Content-Type", "application/json")
 
-	sessionID := r.URL.Query().Get("session_id")
-	if sessionID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error": "session_id is required",
-			"data":  []interface{}{},
-		})
-		return
-	}
+    sessionID := r.URL.Query().Get("session_id")
+    if sessionID == "" {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "error": "session_id is required",
+            "data":  []interface{}{},
+        })
+        return
+    }
 
-	studentID := r.Context().Value("studentID").(string)
+    studentID := r.Context().Value("studentID").(string)
 
-	// First, clean up any stale phase tracking (users who left unexpectedly)
-	_, err := database.GetDB().Exec(`
-        DELETE FROM session_phase_tracking 
-        WHERE session_id = ? 
-        AND start_time < DATE_SUB(NOW(), INTERVAL 24 HOUR)`,
-		sessionID)
-	if err != nil {
-		log.Printf("Error cleaning up stale phase tracking: %v", err)
-	}
-
-	rows, err := database.GetDB().Query(`
-        SELECT DISTINCT su.id, su.full_name, su.department, 
+    // Get ALL participants, not just those with phase tracking
+    rows, err := database.GetDB().Query(`
+        SELECT su.id, su.full_name, su.department, 
                COALESCE(su.photo_url, '') as profileImage 
         FROM session_participants sp
         JOIN student_users su ON sp.student_id = su.id
-        JOIN session_phase_tracking spt ON sp.session_id = spt.session_id 
-                                      AND sp.student_id = spt.student_id
         WHERE sp.session_id = ? 
           AND sp.is_dummy = FALSE
           AND su.is_active = TRUE
-          AND spt.start_time > DATE_SUB(NOW(), INTERVAL 12 HOUR)
         ORDER BY su.full_name`,
-		sessionID)
+        sessionID)
 
-	if err != nil {
-		log.Printf("Database error fetching participants: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error": "Database error",
-			"data":  []interface{}{},
-		})
-		return
-	}
-	defer rows.Close()
+    if err != nil {
+        log.Printf("Database error fetching participants: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "error": "Database error",
+            "data":  []interface{}{},
+        })
+        return
+    }
+    defer rows.Close()
 
-	var participants []map[string]interface{}
-	for rows.Next() {
-		var participant struct {
-			ID           string
-			FullName     string
-			Department   string
-			ProfileImage string // Changed from sql.NullString to string
-		}
-		if err := rows.Scan(&participant.ID, &participant.FullName, &participant.Department, &participant.ProfileImage); err != nil {
-			log.Printf("Error scanning participant: %v", err)
-			continue
-		}
+    var participants []map[string]interface{}
+    for rows.Next() {
+        var participant struct {
+            ID           string
+            FullName     string
+            Department   string
+            ProfileImage string
+        }
+        if err := rows.Scan(&participant.ID, &participant.FullName, &participant.Department, &participant.ProfileImage); err != nil {
+            log.Printf("Error scanning participant: %v", err)
+            continue
+        }
 
-		// Skip the current student
-		if participant.ID == studentID {
-			continue
-		}
+        // Skip the current student
+        if participant.ID == studentID {
+            continue
+        }
 
-		// Use default image if profile image is not available
-		imageURL := participant.ProfileImage
-		if imageURL == "" {
-			imageURL = "https://ui-avatars.com/api/?name=" + url.QueryEscape(participant.FullName) + "&background=random"
-		}
+        // Use default image if profile image is not available
+        imageURL := participant.ProfileImage
+        if imageURL == "" {
+            imageURL = "https://ui-avatars.com/api/?name=" + url.QueryEscape(participant.FullName) + "&background=random"
+        }
 
-		participants = append(participants, map[string]interface{}{
-			"id":           participant.ID,
-			"name":         participant.FullName,
-			"email":        "",
-			"department":   participant.Department,
-			"profileImage": imageURL,
-		})
-	}
+        participants = append(participants, map[string]interface{}{
+            "id":           participant.ID,
+            "name":         participant.FullName,
+            "email":        "",
+            "department":   participant.Department,
+            "profileImage": imageURL,
+        })
+    }
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"data": participants,
-	})
+    log.Printf("Returning %d participants for session %s", len(participants), sessionID)
+
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "data": participants,
+    })
 }
+
+
+// func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
+// 	w.Header().Set("Content-Type", "application/json")
+
+// 	sessionID := r.URL.Query().Get("session_id")
+// 	if sessionID == "" {
+// 		w.WriteHeader(http.StatusBadRequest)
+// 		json.NewEncoder(w).Encode(map[string]interface{}{
+// 			"error": "session_id is required",
+// 			"data":  []interface{}{},
+// 		})
+// 		return
+// 	}
+
+// 	studentID := r.Context().Value("studentID").(string)
+
+// 	// First, clean up any stale phase tracking (users who left unexpectedly)
+// 	_, err := database.GetDB().Exec(`
+//         DELETE FROM session_phase_tracking 
+//         WHERE session_id = ? 
+//         AND start_time < DATE_SUB(NOW(), INTERVAL 24 HOUR)`,
+// 		sessionID)
+// 	if err != nil {
+// 		log.Printf("Error cleaning up stale phase tracking: %v", err)
+// 	}
+
+// 	rows, err := database.GetDB().Query(`
+//         SELECT DISTINCT su.id, su.full_name, su.department, 
+//                COALESCE(su.photo_url, '') as profileImage 
+//         FROM session_participants sp
+//         JOIN student_users su ON sp.student_id = su.id
+//         JOIN session_phase_tracking spt ON sp.session_id = spt.session_id 
+//                                       AND sp.student_id = spt.student_id
+//         WHERE sp.session_id = ? 
+//           AND sp.is_dummy = FALSE
+//           AND su.is_active = TRUE
+//           AND spt.start_time > DATE_SUB(NOW(), INTERVAL 12 HOUR)
+//         ORDER BY su.full_name`,
+// 		sessionID)
+
+// 	if err != nil {
+// 		log.Printf("Database error fetching participants: %v", err)
+// 		w.WriteHeader(http.StatusInternalServerError)
+// 		json.NewEncoder(w).Encode(map[string]interface{}{
+// 			"error": "Database error",
+// 			"data":  []interface{}{},
+// 		})
+// 		return
+// 	}
+// 	defer rows.Close()
+
+// 	var participants []map[string]interface{}
+// 	for rows.Next() {
+// 		var participant struct {
+// 			ID           string
+// 			FullName     string
+// 			Department   string
+// 			ProfileImage string // Changed from sql.NullString to string
+// 		}
+// 		if err := rows.Scan(&participant.ID, &participant.FullName, &participant.Department, &participant.ProfileImage); err != nil {
+// 			log.Printf("Error scanning participant: %v", err)
+// 			continue
+// 		}
+
+// 		// Skip the current student
+// 		if participant.ID == studentID {
+// 			continue
+// 		}
+
+// 		// Use default image if profile image is not available
+// 		imageURL := participant.ProfileImage
+// 		if imageURL == "" {
+// 			imageURL = "https://ui-avatars.com/api/?name=" + url.QueryEscape(participant.FullName) + "&background=random"
+// 		}
+
+// 		participants = append(participants, map[string]interface{}{
+// 			"id":           participant.ID,
+// 			"name":         participant.FullName,
+// 			"email":        "",
+// 			"department":   participant.Department,
+// 			"profileImage": imageURL,
+// 		})
+// 	}
+
+// 	json.NewEncoder(w).Encode(map[string]interface{}{
+// 		"data": participants,
+// 	})
+// }
 
 func CheckSurveyCompletion(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.URL.Query().Get("session_id")
