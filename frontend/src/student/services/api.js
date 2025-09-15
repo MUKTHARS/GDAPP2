@@ -459,12 +459,43 @@ getFeedback: (sessionId) => api.get('/student/feedback/get', {
     ]
 }),
   bookVenue: (venueId) => api.post('/student/sessions/book', { venue_id: venueId }),
- checkBooking: (venueId) => api.get('/student/session/check', { 
-        params: { venue_id: venueId },
-        validateStatus: function (status) {
-            return status < 500; // Accept all status codes except server errors
+checkBooking: (venueId) => api.get('/student/session/check', { 
+  params: { venue_id: venueId },
+  validateStatus: function (status) {
+    return status < 500; // Accept all status codes except server errors
+  },
+  transformResponse: [
+    function (data) {
+      try {
+        // Handle empty responses or invalid data
+        if (!data) {
+          return { is_booked: false };
         }
-    }),
+        
+        // Handle string responses
+        if (typeof data === 'string') {
+          try {
+            const parsed = JSON.parse(data);
+            return { is_booked: parsed.is_booked === true };
+          } catch (e) {
+            return { is_booked: false };
+          }
+        }
+        
+        // Handle object responses
+        return { 
+          is_booked: data.is_booked === true 
+        };
+      } catch (e) {
+        console.error('Booking check parsing error:', e);
+        return { is_booked: false };
+      }
+    }
+  ]
+}).catch(error => {
+  console.error('Booking check API error:', error);
+  return { data: { is_booked: false } };
+}),
   cancelBooking: (venueId) => api.delete('/student/session/cancel', { data: { venue_id: venueId } }),
    updateSessionStatus: (sessionId, status) => api.put('/student/session/status', { sessionId, status }),
    startSurveyTimer: (sessionId) => api.post('/student/survey/start', { session_id: sessionId }),

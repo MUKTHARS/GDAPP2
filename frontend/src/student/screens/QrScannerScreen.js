@@ -99,7 +99,7 @@ const checkActiveBooking = async () => {
 
 
 const isWithinSessionTime = (timing) => {
-    if (!timing || timing.trim() === '') return true; // No timing restriction
+    if (!timing || timing.trim() === '') return true;
     
     try {
         const parts = timing.split(' | ');
@@ -110,21 +110,26 @@ const isWithinSessionTime = (timing) => {
         
         // Parse date (DD/MM/YYYY)
         const [day, month, year] = datePart.split('/').map(Number);
+        
+        // Create date in IST timezone
         const sessionDate = new Date(year, month - 1, day);
         
-        // Check if session is today
-        const today = new Date();
-        const isToday = sessionDate.getDate() === today.getDate() &&
-                      sessionDate.getMonth() === today.getMonth() &&
-                      sessionDate.getFullYear() === today.getFullYear();
+        // Check if session is today in IST
+        const now = new Date();
+        const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
+        const istNow = new Date(now.getTime() + istOffset);
+        
+        const isToday = sessionDate.getDate() === istNow.getDate() &&
+                      sessionDate.getMonth() === istNow.getMonth() &&
+                      sessionDate.getFullYear() === istNow.getFullYear();
         
         if (!isToday) {
+            console.log('Session not today - session date:', sessionDate, 'IST today:', istNow);
             return false;
         }
         
         // Parse time range (HH:MM AM/PM - HH:MM AM/PM)
         const [startStr, endStr] = timeRange.split(' - ').map(s => s.trim());
-        const now = new Date();
         
         const parseTime12Hour = (timeStr) => {
             const timeParts = timeStr.split(' ');
@@ -139,23 +144,27 @@ const isWithinSessionTime = (timing) => {
                 hours = 0;
             }
             
-            const date = new Date();
-            date.setHours(hours, minutes, 0, 0);
-            return date;
+            // Create date with IST timezone
+            const date = new Date(year, month - 1, day, hours, minutes, 0, 0);
+            return new Date(date.getTime() + istOffset);
         };
         
         const startTime = parseTime12Hour(startStr);
         const endTime = parseTime12Hour(endStr);
         
         if (!startTime || !endTime) {
-            return true; // If parsing fails, allow access
+            console.log('Failed to parse time:', startStr, endStr);
+            return true;
         }
         
-        return now >= startTime && now <= endTime;
+        const isWithinTime = istNow >= startTime && istNow <= endTime;
+        console.log('Time check - Now:', istNow, 'Start:', startTime, 'End:', endTime, 'Within:', isWithinTime);
+        
+        return isWithinTime;
         
     } catch (error) {
         console.error('Error parsing session timing:', error);
-        return true; // Default to allowed if parsing fails
+        return true;
     }
 };
 

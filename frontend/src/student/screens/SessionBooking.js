@@ -79,7 +79,7 @@ const fetchVenues = async (lvl) => {
       throw new Error('Authentication required');
     }
 
-    // Fetch venues for ALL levels (not just the current level)
+    // Fetch venues for ALL levels
     const allVenues = [];
     const bookedVenuesList = [];
     
@@ -89,25 +89,10 @@ const fetchVenues = async (lvl) => {
         const response = await api.student.getSessions(currentLevel);
         
         if (response.data && response.data.length > 0) {
-          // Process venues with proper expiry logic for each level
+          // Process venues with proper expiry logic
           const processedVenues = response.data.map(venue => {
-            let isExpired = false;
-            
-            // Check if venue has an end time and if it's expired
-            if (venue.end_time) {
-              try {
-                const endTime = new Date(venue.end_time);
-                const now = new Date();
-                
-                // Handle timezone issues by comparing timestamps
-                isExpired = endTime.getTime() <= now.getTime();
-                
-                console.log(`Venue ${venue.venue_name} (Level ${venue.level}): EndTime=${endTime.toISOString()}, Now=${now.toISOString()}, IsExpired=${isExpired}`);
-              } catch (error) {
-                console.error('Error parsing end time:', error);
-                isExpired = false; // Default to not expired if parsing fails
-              }
-            }
+            // Use the backend's is_expired flag directly for accurate expiration
+            const isExpired = venue.is_expired === true;
             
             return {
               ...venue,
@@ -122,18 +107,19 @@ const fetchVenues = async (lvl) => {
             if (!venue.is_expired && venue.level === lvl) {
               try {
                 const bookingResponse = await api.student.checkBooking(venue.id);
-                if (bookingResponse.data && bookingResponse.data.is_booked) {
+                // Only add to booked venues if the response is true
+                if (bookingResponse.data && bookingResponse.data.is_booked === true) {
                   bookedVenuesList.push(venue.id);
                 }
               } catch (error) {
-                console.log('Booking check failed for venue:', venue.id);
+                console.log('Booking check failed for venue:', venue.id, error);
+                // Don't add to booked venues if check fails
               }
             }
           }
         }
       } catch (levelError) {
         console.log(`Error fetching level ${currentLevel} venues:`, levelError);
-        // Continue with other levels if one fails
       }
     }
     
@@ -142,13 +128,11 @@ const fetchVenues = async (lvl) => {
       setVenues([]);
       setBookedVenues([]);
     } else {
-      // Filter venues to show only the selected level, but include expired ones
+      // Filter venues to show only the selected level
       const filteredVenues = allVenues.filter(venue => venue.level === lvl);
       
       setVenues(filteredVenues);
       setBookedVenues(bookedVenuesList);
-      
-      console.log(`Displaying ${filteredVenues.length} venues for level ${lvl} (${filteredVenues.filter(v => v.is_expired).length} expired)`);
     }
   } catch (error) {
     console.error('Venues fetch error:', error);
@@ -160,29 +144,37 @@ const fetchVenues = async (lvl) => {
   }
 };
 
-  const openVenueDetails = (venue) => {
-    setSelectedVenue(venue);
-    
+const checkIfBooked = async (venueId) => {
+  try {
     // Only check booking status for non-expired venues
-    if (!venue.is_expired) {
-      checkIfBooked(venue.id);
-    } else {
+    const venue = venues.find(v => v.id === venueId);
+    if (venue && venue.is_expired) {
       setIsBooked(false); // Expired venues can't be booked
+      return;
     }
     
-    setIsModalVisible(true);
-  };
+    const authData = await auth.getAuthData();
+    const response = await api.student.checkBooking(venueId);
+    setIsBooked(response.data.is_booked === true);
+  } catch (error) {
+    console.error('Check booking error:', error);
+    setIsBooked(false);
+  }
+};
 
-  const checkIfBooked = async (venueId) => {
-    try {
-      const authData = await auth.getAuthData();
-      const response = await api.student.checkBooking(venueId);
-      setIsBooked(response.data.is_booked);
-    } catch (error) {
-      console.error('Check booking error:', error);
-      setIsBooked(false);
-    }
-  };
+// Update the openVenueDetails function
+const openVenueDetails = (venue) => {
+  setSelectedVenue(venue);
+  
+  // For expired venues, don't check booking status
+  if (venue.is_expired) {
+    setIsBooked(false);
+  } else {
+    checkIfBooked(venue.id);
+  }
+  
+  setIsModalVisible(true);
+};
 
 const handleBookVenue = async () => {
   // Prevent booking expired venues

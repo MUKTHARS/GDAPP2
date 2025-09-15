@@ -15,7 +15,7 @@ export default function QuestionBank() {
   const [modalVisible, setModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const levels = [1, 2, 3]; // Assuming we have 3 GD levels
+  const levels = [1, 2, 3, 4, 5]; // Assuming we have 3 GD levels
 
   useEffect(() => {
     fetchQuestions();

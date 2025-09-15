@@ -77,9 +77,16 @@ func DeleteVenue(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Check if venue is expired (session timing is in the past)
+    // Get current time in IST
+    loc, err := time.LoadLocation("Asia/Kolkata")
+    if err != nil {
+        loc = time.Local
+    }
+    now := time.Now().In(loc)
+
+    // Check if venue is expired (session timing is in the past using IST)
     var sessionTiming string
-    err := database.GetDB().QueryRow(
+    err = database.GetDB().QueryRow(
         "SELECT session_timing FROM venues WHERE id = ?",
         venueID,
     ).Scan(&sessionTiming)
@@ -96,26 +103,31 @@ func DeleteVenue(w http.ResponseWriter, r *http.Request) {
         parts := strings.Split(sessionTiming, " | ")
         if len(parts) == 2 {
             datePart := parts[0]
-            // Parse date in DD/MM/YYYY format
+            // Parse date in DD/MM/YYYY format and convert to IST
             dateParts := strings.Split(datePart, "/")
             if len(dateParts) == 3 {
                 day, _ := strconv.Atoi(dateParts[0])
                 month, _ := strconv.Atoi(dateParts[1])
                 year, _ := strconv.Atoi(dateParts[2])
                 
-                venueDate := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
-                if venueDate.Before(time.Now().AddDate(0, 0, -1)) { // Allow 1 day grace period
+                venueDate := time.Date(year, time.Month(month), day, 0, 0, 0, 0, loc)
+                // Allow 1 day grace period in IST
+                if venueDate.Before(now.AddDate(0, 0, -1)) {
                     isExpired = true
                 }
             }
         }
     }
 
+    // Rest of the function remains the same...
     if !isExpired {
-        // For non-expired venues, check for active sessions
+        // For non-expired venues, check for active sessions using IST
         var sessionCount int
         err := database.GetDB().QueryRow(
-            "SELECT COUNT(*) FROM gd_sessions WHERE venue_id = ? AND status IN ('pending', 'active')",
+            `SELECT COUNT(*) FROM gd_sessions 
+             WHERE venue_id = ? 
+             AND status IN ('pending', 'active')
+             AND end_time > CONVERT_TZ(NOW(), 'SYSTEM', '+05:30')`,  // Use IST
             venueID,
         ).Scan(&sessionCount)
 

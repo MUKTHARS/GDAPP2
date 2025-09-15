@@ -373,14 +373,14 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
     }
 
 
-   var venueTiming struct {
+ var venueTiming struct {
         SessionTiming   sql.NullString
         AvailableDays   sql.NullString
         StartTime       sql.NullString
         EndTime         sql.NullString
     }
     
-     err = database.GetDB().QueryRow(`
+    err = database.GetDB().QueryRow(`
         SELECT session_timing, available_days, start_time, end_time 
         FROM venues WHERE id = ?`, qrPayload.VenueID).Scan(
             &venueTiming.SessionTiming, &venueTiming.AvailableDays, 
@@ -392,7 +392,8 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to verify session timing"})
         return
     }
-   sessionTiming := ""
+    
+    sessionTiming := ""
     if venueTiming.SessionTiming.Valid {
         sessionTiming = venueTiming.SessionTiming.String
     }
@@ -412,6 +413,12 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         endTime = venueTiming.EndTime.String
     }
 
+    // ADD DEBUG LOGGING HERE
+    log.Printf("VENUE TIMING DEBUG - SessionTiming: %s", sessionTiming)
+    log.Printf("VENUE TIMING DEBUG - AvailableDays: %s", availableDays)
+    log.Printf("VENUE TIMING DEBUG - StartTime: %s", startTime)
+    log.Printf("VENUE TIMING DEBUG - EndTime: %s", endTime)
+
     if !isWithinSessionTime(sessionTiming, availableDays, startTime, endTime) {
         log.Printf("Student %s tried to join session outside allowed time", studentID)
         w.WriteHeader(http.StatusForbidden)
@@ -420,6 +427,7 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         })
         return
     }
+    
 
     // Get venue level from QR code's venue
     var venueLevel int
@@ -629,50 +637,81 @@ func isWithinSessionTime(sessionTiming, availableDays, startTime, endTime string
         return true
     }
     
-    now := time.Now().Local() // Use local time
-    // currentTime := now.Format("15:04")
-    currentDay := strings.ToLower(now.Weekday().String()[:3])
+    // Get IST location
+    loc, err := time.LoadLocation("Asia/Kolkata")
+    if err != nil {
+        loc = time.Local
+    }
+    now := time.Now().In(loc)
+    
+    log.Printf("TIMING DEBUG - Current IST: %v", now)
+    log.Printf("TIMING DEBUG - Session Timing: %s", sessionTiming)
+    log.Printf("TIMING DEBUG - Available Days: %s", availableDays)
+    log.Printf("TIMING DEBUG - Start Time: %s", startTime)
+    log.Printf("TIMING DEBUG - End Time: %s", endTime)
 
-    // Parse session timing if available
+    // Parse session timing if available (this takes priority)
     if sessionTiming != "" {
         parts := strings.Split(sessionTiming, " | ")
         if len(parts) == 2 {
-            datePart := parts[0]
-            timeRange := parts[1]
+            datePart := strings.TrimSpace(parts[0])
+            timeRange := strings.TrimSpace(parts[1])
             
+            log.Printf("TIMING DEBUG - Date Part: %s, Time Range: %s", datePart, timeRange)
+            
+            // Parse date in DD/MM/YYYY format
             dateParts := strings.Split(datePart, "/")
             if len(dateParts) == 3 {
-                day, _ := strconv.Atoi(dateParts[0])
-                month, _ := strconv.Atoi(dateParts[1])
-                year, _ := strconv.Atoi(dateParts[2])
+                day, err1 := strconv.Atoi(strings.TrimSpace(dateParts[0]))
+                month, err2 := strconv.Atoi(strings.TrimSpace(dateParts[1]))
+                year, err3 := strconv.Atoi(strings.TrimSpace(dateParts[2]))
                 
-                sessionDate := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
-                today := time.Now().Truncate(24 * time.Hour).Local()
-                
-                if sessionDate.Equal(today) {
+                if err1 == nil && err2 == nil && err3 == nil {
+                    // Check if session date matches today's date
+                    sessionDate := time.Date(year, time.Month(month), day, 0, 0, 0, 0, loc)
+                    today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+                    
+                    log.Printf("TIMING DEBUG - Session Date: %v, Today: %v", sessionDate, today)
+                    
+                    if !sessionDate.Equal(today) {
+                        log.Printf("TIMING DEBUG - Session date %v doesn't match today %v", sessionDate, today)
+                        return false
+                    }
+                    
+                    // Parse time range (HH:MM AM/PM - HH:MM AM/PM)
                     timeParts := strings.Split(timeRange, " - ")
                     if len(timeParts) == 2 {
-                        startStr := strings.TrimSpace(timeParts[0])
-                        endStr := strings.TrimSpace(timeParts[1])
+                        startTimeStr := strings.TrimSpace(timeParts[0])
+                        endTimeStr := strings.TrimSpace(timeParts[1])
                         
-                        start, err1 := parseTime12Hour(startStr)
-                        end, err2 := parseTime12Hour(endStr)
+                        log.Printf("TIMING DEBUG - Start Time String: %s, End Time String: %s", startTimeStr, endTimeStr)
+                        
+                        // Parse start and end times
+                        startHour, startMinute, err1 := parse12HourTime(startTimeStr)
+                        endHour, endMinute, err2 := parse12HourTime(endTimeStr)
                         
                         if err1 == nil && err2 == nil {
-                            current := time.Now().Local()
-                            return current.After(start) && current.Before(end)
+                            // Create time objects for today with parsed hours/minutes
+                            sessionStart := time.Date(now.Year(), now.Month(), now.Day(), startHour, startMinute, 0, 0, loc)
+                            sessionEnd := time.Date(now.Year(), now.Month(), now.Day(), endHour, endMinute, 0, 0, loc)
+                            
+                            log.Printf("TIMING DEBUG - Session Start: %v, Session End: %v, Now: %v", 
+                                sessionStart, sessionEnd, now)
+                            log.Printf("TIMING DEBUG - Is within time: %v", now.After(sessionStart) && now.Before(sessionEnd))
+                            
+                            return now.After(sessionStart) && now.Before(sessionEnd)
+                        } else {
+                            log.Printf("TIMING DEBUG - Error parsing times: %v, %v", err1, err2)
                         }
                     }
-                } else {
-                    // Session is not today, so not active
-                    return false
                 }
             }
         }
     }
 
-    // Fallback to available_days and start_time/end_time
+    // Fallback to available_days and start_time/end_time if session_timing is not set or parsing failed
     if availableDays != "" {
+        currentDay := strings.ToLower(now.Weekday().String()[:3]) // "mon", "tue", etc.
         days := strings.Split(strings.ToLower(availableDays), ",")
         dayAllowed := false
         for _, day := range days {
@@ -682,37 +721,91 @@ func isWithinSessionTime(sessionTiming, availableDays, startTime, endTime string
             }
         }
         
+        log.Printf("TIMING DEBUG - Current Day: %s, Allowed Days: %v, Day Allowed: %v", 
+            currentDay, days, dayAllowed)
+        
         if !dayAllowed {
             return false
         }
     }
 
+    // Check time range if available
     if startTime != "" && endTime != "" {
         start, err1 := time.Parse("15:04", startTime)
         end, err2 := time.Parse("15:04", endTime)
         
         if err1 == nil && err2 == nil {
             // Convert to today's date with local timezone
-            startToday := time.Date(now.Year(), now.Month(), now.Day(), start.Hour(), start.Minute(), 0, 0, time.Local)
-            endToday := time.Date(now.Year(), now.Month(), now.Day(), end.Hour(), end.Minute(), 0, 0, time.Local)
+            startToday := time.Date(now.Year(), now.Month(), now.Day(), start.Hour(), start.Minute(), 0, 0, loc)
+            endToday := time.Date(now.Year(), now.Month(), now.Day(), end.Hour(), end.Minute(), 0, 0, loc)
+            
+            log.Printf("TIMING DEBUG - Fallback Start: %v, Fallback End: %v, Now: %v", 
+                startToday, endToday, now)
+            log.Printf("TIMING DEBUG - Fallback within time: %v", now.After(startToday) && now.Before(endToday))
             
             return now.After(startToday) && now.Before(endToday)
         }
     }
 
+    log.Printf("TIMING DEBUG - Defaulting to allowed (no timing restrictions could be validated)")
     return true // Default to allowed if timing validation fails
 }
 
-func parseTime12Hour(timeStr string) (time.Time, error) {
-    layout := "3:04 PM"
-    t, err := time.Parse(layout, timeStr)
-    if err != nil {
-        return time.Time{}, err
+func parse12HourTime(timeStr string) (int, int, error) {
+    timeStr = strings.TrimSpace(timeStr)
+    log.Printf("PARSING 12H TIME: %s", timeStr)
+    
+    // Handle various time formats
+    var timePart, period string
+    
+    if strings.Contains(timeStr, " ") {
+        parts := strings.Split(timeStr, " ")
+        timePart = strings.TrimSpace(parts[0])
+        if len(parts) > 1 {
+            period = strings.ToUpper(strings.TrimSpace(parts[1]))
+        }
+    } else {
+        // Try to detect period if no space
+        if strings.Contains(strings.ToUpper(timeStr), "AM") {
+            timePart = strings.Replace(strings.ToUpper(timeStr), "AM", "", 1)
+            period = "AM"
+        } else if strings.Contains(strings.ToUpper(timeStr), "PM") {
+            timePart = strings.Replace(strings.ToUpper(timeStr), "PM", "", 1)
+            period = "PM"
+        } else {
+            timePart = timeStr
+            period = "AM" // Default to AM if no period specified
+        }
     }
     
-    now := time.Now()
-    return time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, now.Location()), nil
+    // Split hours and minutes
+    timeParts := strings.Split(timePart, ":")
+    if len(timeParts) != 2 {
+        return 0, 0, fmt.Errorf("invalid time format: %s", timeStr)
+    }
+    
+    hour, err := strconv.Atoi(strings.TrimSpace(timeParts[0]))
+    if err != nil {
+        return 0, 0, err
+    }
+    
+    minute, err := strconv.Atoi(strings.TrimSpace(timeParts[1]))
+    if err != nil {
+        return 0, 0, err
+    }
+    
+    // Convert to 24-hour format
+    if period == "PM" && hour < 12 {
+        hour += 12
+    }
+    if period == "AM" && hour == 12 {
+        hour = 0
+    }
+    
+    log.Printf("PARSED TIME: %s -> %02d:%02d (24h)", timeStr, hour, minute)
+    return hour, minute, nil
 }
+
 
 func GetVenuesForStudent(w http.ResponseWriter, r *http.Request) {
     rows, err := database.GetDB().Query(`
@@ -2269,6 +2362,13 @@ func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    // Get current time in IST
+    loc, err := time.LoadLocation("Asia/Kolkata")
+    if err != nil {
+        loc = time.Local
+    }
+    now := time.Now().In(loc)
+
     // Get all venues with session information
     rows, err := database.GetDB().Query(`
         SELECT 
@@ -2284,7 +2384,7 @@ func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
                 JOIN gd_sessions s ON sp.session_id = s.id 
                 WHERE s.venue_id = v.id 
                 AND s.status IN ('pending', 'active', 'lobby')
-                AND s.end_time > NOW()  -- Only count non-expired sessions
+                AND s.end_time > CONVERT_TZ(NOW(), 'SYSTEM', '+05:30')
             ), 0) as booked,
             -- Get the most recent active session's end time
             (
@@ -2300,7 +2400,7 @@ func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
                 SELECT 1 FROM gd_sessions s 
                 WHERE s.venue_id = v.id 
                 AND s.status IN ('pending', 'active', 'lobby')
-                AND s.end_time > NOW()
+                AND s.end_time > CONVERT_TZ(NOW(), 'SYSTEM', '+05:30')
             ) as has_active_session
         FROM venues v 
         WHERE v.level = ? 
@@ -2316,7 +2416,6 @@ func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
     defer rows.Close()
 
     var venues []map[string]interface{}
-    now := time.Now()
     
     for rows.Next() {
         var venue struct {
@@ -2338,21 +2437,72 @@ func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
             continue
         }
 
-        // Determine if session is expired
+        // Determine if session is expired using session_timing from venue
         isExpired := false
-        if venue.SessionEndTime.Valid {
-            endTime, err := time.Parse("2006-01-02 15:04:05", venue.SessionEndTime.String)
-            if err != nil {
-                log.Printf("Error parsing end time for venue %s: %v", venue.ID, err)
-                isExpired = false // If we can't parse, assume not expired
-            } else {
-                isExpired = endTime.Before(now) || endTime.Equal(now)
+        if venue.SessionTiming != "" {
+            parts := strings.Split(venue.SessionTiming, " | ")
+            if len(parts) == 2 {
+                datePart := parts[0]
+                timeRange := parts[1]
+                
+                // Parse date in DD/MM/YYYY format
+                dateParts := strings.Split(datePart, "/")
+                if len(dateParts) == 3 {
+                    day, err1 := strconv.Atoi(dateParts[0])
+                    month, err2 := strconv.Atoi(dateParts[1])
+                    year, err3 := strconv.Atoi(dateParts[2])
+                    
+                    if err1 == nil && err2 == nil && err3 == nil {
+                        // Parse time range to get end time
+                        timeParts := strings.Split(timeRange, " - ")
+                        if len(timeParts) == 2 {
+                            endTimeStr := strings.TrimSpace(timeParts[1])
+                            
+                            // Parse end time (format: "HH:MM AM/PM")
+                            var endHour, endMinute int
+                            var period string
+                            
+                            if strings.Contains(endTimeStr, " ") {
+                                timePart := strings.Split(endTimeStr, " ")[0]
+                                period = strings.Split(endTimeStr, " ")[1]
+                                
+                                timeParts := strings.Split(timePart, ":")
+                                if len(timeParts) == 2 {
+                                    endHour, _ = strconv.Atoi(timeParts[0])
+                                    endMinute, _ = strconv.Atoi(timeParts[1])
+                                    
+                                    // Convert to 24-hour format
+                                    if period == "PM" && endHour < 12 {
+                                        endHour += 12
+                                    }
+                                    if period == "AM" && endHour == 12 {
+                                        endHour = 0
+                                    }
+                                }
+                            }
+                            
+                            // Create session end time in IST
+                            sessionEndTime := time.Date(year, time.Month(month), day, endHour, endMinute, 0, 0, loc)
+                            
+                            // Check if session has ended (is in the past)
+                            isExpired = sessionEndTime.Before(now)
+                            
+                            log.Printf("Venue %s: SessionEnd=%v, Now=%v, Expired=%v", 
+                                venue.Name, sessionEndTime, now, isExpired)
+                        }
+                    }
+                }
             }
         }
 
-        // Log for debugging
-        log.Printf("Venue %s: HasActiveSession=%t, EndTime=%s, IsExpired=%t, Now=%s", 
-            venue.Name, venue.HasActiveSession, venue.SessionEndTime.String, isExpired, now.Format("2006-01-02 15:04:05"))
+        // If no session timing info, use the session_end_time from database as fallback
+        if venue.SessionTiming == "" && venue.SessionEndTime.Valid {
+            endTime, err := time.Parse("2006-01-02 15:04:05", venue.SessionEndTime.String)
+            if err == nil {
+                endTimeIST := endTime.In(loc)
+                isExpired = endTimeIST.Before(now)
+            }
+        }
 
         venues = append(venues, map[string]interface{}{
             "id":             venue.ID,
@@ -2363,7 +2513,7 @@ func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
             "session_timing": venue.SessionTiming,
             "table_details":  venue.TableDetails,
             "level":          venue.Level,
-            "has_active_session": venue.HasActiveSession,
+            "has_active_session": venue.HasActiveSession && !isExpired,
             "is_expired":     isExpired,
             "end_time":       venue.SessionEndTime.String,
         })
@@ -2374,25 +2524,29 @@ func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 func CheckBooking(w http.ResponseWriter, r *http.Request) {
-	studentID := r.Context().Value("studentID").(string)
-	venueID := r.URL.Query().Get("venue_id")
+    studentID := r.Context().Value("studentID").(string)
+    venueID := r.URL.Query().Get("venue_id")
 
-	var isBooked bool
-	err := database.GetDB().QueryRow(`
+    var isBooked bool
+    err := database.GetDB().QueryRow(`
         SELECT EXISTS(
             SELECT 1 FROM session_participants sp
             JOIN gd_sessions s ON sp.session_id = s.id
-            WHERE sp.student_id = ? AND s.venue_id = ? AND s.status IN ('pending', 'active', 'lobby')
+            WHERE sp.student_id = ? 
+            AND s.venue_id = ? 
+            AND s.status IN ('pending', 'active', 'lobby')
+            AND s.end_time > CONVERT_TZ(NOW(), 'SYSTEM', '+05:30')  -- Only non-expired sessions
         )`, studentID, venueID).Scan(&isBooked)
 
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-		return
-	}
+    if err != nil {
+        log.Printf("Database error checking booking: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"is_booked": isBooked})
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]bool{"is_booked": isBooked})
 }
 
 func CancelBooking(w http.ResponseWriter, r *http.Request) {
