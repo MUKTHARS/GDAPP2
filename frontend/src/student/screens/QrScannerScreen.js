@@ -327,12 +327,13 @@ const isWithinSessionTime = (timing) => {
         </Text>
     </View>
 )}
+
 {!sessionTiming && currentBooking && (
     <View style={styles.timingInfo}>
-        <Icon name="info-outline" size={16} color="#fff" />
+        {/* <Icon name="info-outline" size={16} color="#fff" />
         <Text style={styles.timingText}>
             Session timing information not available
-        </Text>
+        </Text> */}
     </View>
 )}
 

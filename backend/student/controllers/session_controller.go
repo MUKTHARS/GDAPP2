@@ -2219,24 +2219,35 @@ func CheckLevelProgression(w http.ResponseWriter, r *http.Request) {
 
     log.Printf("Student %s current level: %d", studentID, currentLevel)
 
-var alreadyPromoted bool
-err = database.GetDB().QueryRow(`
-    SELECT EXISTS(
-        SELECT 1 FROM student_promotions 
-        WHERE session_id = ? AND student_id = ?
-    )`, sessionID, studentID).Scan(&alreadyPromoted)
+    // Check if student was already promoted in this session
+    var alreadyPromoted bool
+    var newLevel int
+    err = database.GetDB().QueryRow(`
+        SELECT EXISTS(
+            SELECT 1 FROM student_promotions 
+            WHERE session_id = ? AND student_id = ?
+        )`, sessionID, studentID).Scan(&alreadyPromoted)
 
-if err != nil {
-    log.Printf("WARNING: Error checking if already promoted: %v", err)
-}
+    if err != nil {
+        log.Printf("WARNING: Error checking if already promoted: %v", err)
+        alreadyPromoted = false
+    }
 
-if alreadyPromoted {
-    log.Printf("Student %s already promoted in session %s, skipping", studentID, sessionID)
-    // varpromoted := false
-    // newLevel := currentLevel
-    // Still return the response but without promotion
-}
-
+    if alreadyPromoted {
+        log.Printf("Student %s already promoted in session %s, skipping", studentID, sessionID)
+        // Return current level without promoting again
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "promoted":      false,
+            "old_level":     currentLevel,
+            "new_level":     currentLevel,
+            "rank":          0,
+            "session_id":    sessionID,
+            "student_id":    studentID,
+            "already_promoted": true,
+        })
+        return
+    }
 
     // Check if ALL surveys are completed for this session
     var totalParticipants, completedCount int
@@ -2258,7 +2269,7 @@ if alreadyPromoted {
     log.Printf("Survey completion: %d/%d participants completed", completedCount, totalParticipants)
 
     promoted := false
-    var newLevel int = currentLevel
+    newLevel = currentLevel
     var rank int
 
     // Only check ranking if ALL surveys are completed

@@ -5,7 +5,7 @@ import auth from '../services/auth';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import HamburgerHeader from '../components/HamburgerHeader';
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
 const ResultItem = ({ item, index }) => {
   // Ensure numeric values
   const totalScore = typeof item.total_score === 'string' ? 
@@ -160,7 +160,7 @@ useEffect(() => {
         
         setResults(processedResults);
         
-        // Check if current user was promoted (only for top 3)
+        // Check if current user was promoted (only for top 3) - AFTER results are set
         try {
           const promotionResponse = await api.student.checkLevelProgression(sessionId);
           
@@ -194,46 +194,46 @@ useEffect(() => {
 }, [sessionId]);
 
 
-  useEffect(() => {
-    const fetchResults = async () => {
-      try {
-        setLoading(true);
-        const response = await api.student.getResults(sessionId);
+  // useEffect(() => {
+  //   const fetchResults = async () => {
+  //     try {
+  //       setLoading(true);
+  //       const response = await api.student.getResults(sessionId);
         
-        console.log('Results API response:', response.data);
+  //       console.log('Results API response:', response.data);
         
-        if (response.data?.results) {
-          // Process results to ensure correct data types
-          const processedResults = response.data.results
-            .map(item => ({
-              ...item,
-              // Ensure numeric values - handle both string and number types
-              total_score: typeof item.total_score === 'string' ? 
-                parseFloat(item.total_score) : item.total_score || 0,
-              penalty_points: typeof item.penalty_points === 'string' ? 
-                parseFloat(item.penalty_points) : item.penalty_points || 0,
-              final_score: typeof item.final_score === 'string' ? 
-                parseFloat(item.final_score) : 
-                (item.total_score || 0) - (item.penalty_points || 0),
-              biased_questions: item.biased_questions || 0
-            }))
-            // Sort by final_score descending as backup
-            .sort((a, b) => b.final_score - a.final_score);
+  //       if (response.data?.results) {
+  //         // Process results to ensure correct data types
+  //         const processedResults = response.data.results
+  //           .map(item => ({
+  //             ...item,
+  //             // Ensure numeric values - handle both string and number types
+  //             total_score: typeof item.total_score === 'string' ? 
+  //               parseFloat(item.total_score) : item.total_score || 0,
+  //             penalty_points: typeof item.penalty_points === 'string' ? 
+  //               parseFloat(item.penalty_points) : item.penalty_points || 0,
+  //             final_score: typeof item.final_score === 'string' ? 
+  //               parseFloat(item.final_score) : 
+  //               (item.total_score || 0) - (item.penalty_points || 0),
+  //             biased_questions: item.biased_questions || 0
+  //           }))
+  //           // Sort by final_score descending as backup
+  //           .sort((a, b) => b.final_score - a.final_score);
           
-          setResults(processedResults);
-        } else {
-          setError('No results available for this session');
-        }
-      } catch (err) {
-        setError('Failed to load results');
-        console.error('Results error:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  //         setResults(processedResults);
+  //       } else {
+  //         setError('No results available for this session');
+  //       }
+  //     } catch (err) {
+  //       setError('Failed to load results');
+  //       console.error('Results error:', err);
+  //     } finally {
+  //       setLoading(false);
+  //     }
+  //   };
 
-    fetchResults();
-  }, [sessionId]);
+  //   fetchResults();
+  // }, [sessionId]);
 
 
 
@@ -259,18 +259,24 @@ const LevelUpModal = () => (
         
         <View style={styles.levelUpContent}>
           <Text style={styles.levelUpText}>
-            You ranked #{promotionData?.rank} in this session and have been promoted to:
+            You ranked #{promotionData?.rank} in this session and have been promoted from:
           </Text>
           
-          <View style={styles.levelBadgeLarge}>
-            <LinearGradient
-              colors={['#4F46E5', '#7C3AED']}
-              style={styles.levelBadgeGradient}
-            >
-              <Text style={styles.levelBadgeTextLarge}>
-                Level {promotionData?.new_level}
-              </Text>
-            </LinearGradient>
+          <View style={styles.levelComparison}>
+            <View style={styles.oldLevelBadge}>
+              <Text style={styles.levelBadgeText}>Level {promotionData?.old_level}</Text>
+            </View>
+            <Icon name="arrow-forward" size={24} color="#4F46E5" />
+            <View style={styles.newLevelBadge}>
+              <LinearGradient
+                colors={['#4F46E5', '#7C3AED']}
+                style={styles.levelBadgeGradient}
+              >
+                <Text style={styles.levelBadgeTextLarge}>
+                  Level {promotionData?.new_level}
+                </Text>
+              </LinearGradient>
+            </View>
           </View>
           
           <Text style={styles.levelUpInfo}>
@@ -282,7 +288,11 @@ const LevelUpModal = () => (
           style={styles.levelUpButton}
           onPress={() => {
             setLevelUpModal(false);
-            // Just close the modal, don't navigate
+            // Update local state to reflect the new level
+            if (promotionData?.new_level) {
+              // You might want to update your global state here
+              console.log('Student promoted to level:', promotionData.new_level);
+            }
           }}
           activeOpacity={0.8}
         >
