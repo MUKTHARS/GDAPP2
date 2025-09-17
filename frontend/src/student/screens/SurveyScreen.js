@@ -366,7 +366,11 @@ const proceedToNextQuestion = async (isPartial = false) => {
         setConfirmedQuestions(prev => [...prev, currentQuestion]);
         
         if (currentQuestion === shuffledQuestions.length - 1) {
-            navigation.replace('Waiting', { sessionId });
+            // REPLACE instead of navigate to prevent going back
+            navigation.replace('Waiting', { 
+                sessionId,
+                surveyCompleted: true // Add this flag
+            });
         } else {
             setCurrentQuestion(prev => prev + 1);
         }
@@ -377,6 +381,45 @@ const proceedToNextQuestion = async (isPartial = false) => {
         setIsSubmitting(false);
     }
 };
+
+// const proceedToNextQuestion = async (isPartial = false) => {
+//     setIsSubmitting(true);
+    
+//     try {
+//         const currentSelections = selections[currentQuestion] || {};
+//         if (Object.keys(currentSelections).length > 0) {
+//             const shuffledQuestion = shuffledQuestions[currentQuestion];
+//             const questionNumber = currentQuestion + 1;
+            
+//             const isFinal = !isPartial && (currentQuestion === shuffledQuestions.length - 1);
+            
+//             const responseData = {
+//                 sessionId,
+//                 responses: {
+//                     [questionNumber]: currentSelections
+//                 },
+//                 isPartial: isPartial,
+//                 isFinal: isFinal
+//             };
+            
+//             console.log('Submitting survey data - isFinal:', isFinal, 'isPartial:', isPartial);
+//             await api.student.submitSurvey(responseData, isFinal);
+//         }
+
+//         setConfirmedQuestions(prev => [...prev, currentQuestion]);
+        
+//         if (currentQuestion === shuffledQuestions.length - 1) {
+//             navigation.replace('Waiting', { sessionId });
+//         } else {
+//             setCurrentQuestion(prev => prev + 1);
+//         }
+//     } catch (error) {
+//         console.error('Error submitting survey:', error);
+//         Alert.alert('Error', 'Failed to submit survey. Please try again.');
+//     } finally {
+//         setIsSubmitting(false);
+//     }
+// };
 
   if (loading) {
     return (
@@ -486,7 +529,7 @@ const proceedToNextQuestion = async (isPartial = false) => {
           {/* Bottom Navigation */}
           <View style={styles.navigationContainer}>
             <View style={styles.navigation}>
-              {currentQuestion > 0 && (
+              {/* {currentQuestion > 0 && (
                 <TouchableOpacity
                   style={styles.navButtonContainer}
                   onPress={() => setCurrentQuestion(currentQuestion - 1)}
@@ -497,7 +540,7 @@ const proceedToNextQuestion = async (isPartial = false) => {
                     <Text style={styles.navButtonText}>Previous</Text>
                   </View>
                 </TouchableOpacity>
-              )}
+              )} */}
               
               <View style={styles.centerAction}>
                 {confirmedQuestions.includes(currentQuestion) ? (

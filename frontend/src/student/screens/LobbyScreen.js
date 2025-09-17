@@ -123,35 +123,47 @@ useEffect(() => {
       }
     };
 
-    const fetchParticipants = async () => {
-        try {
-            const token = await AsyncStorage.getItem('token');
-            if (!token) {
-                throw new Error('No authentication token found');
-            }
-
-            const response = await api.get('/student/session/participants', { 
-                params: { session_id: sessionId },
-                headers: {
-                    Authorization: `Bearer ${token.replace(/['"]+/g, '')}`
-                },
-                validateStatus: function (status) {
-                    return status === 200 || status === 404;
-                }
-            });
-            
-            if (response.status === 404) {
-                setParticipants([]);
-            } else {
-                setParticipants(response.data?.data || []);
-            }
-        } catch (error) {
-            console.error('Error fetching participants:', error);
-            setParticipants([]);
-        } finally {
-            setLoading(false);
+   const fetchParticipants = async () => {
+    try {
+        const token = await AsyncStorage.getItem('token');
+        if (!token) {
+            throw new Error('No authentication token found');
         }
-    };
+
+        const response = await api.get('/student/session/participants', { 
+            params: { session_id: sessionId },
+            headers: {
+                Authorization: `Bearer ${token.replace(/['"]+/g, '')}`
+            },
+            validateStatus: function (status) {
+                return status === 200 || status === 404;
+            }
+        });
+        
+        if (response.status === 404) {
+            setParticipants([]);
+        } else {
+            // The backend returns participants excluding current user
+            const otherParticipants = response.data?.data || [];
+            
+            // Add 1 to the count to include current user
+            const totalCount = otherParticipants.length + 1;
+            
+            // Set the participants list as is (without current user)
+            setParticipants(otherParticipants);
+            
+            // Update the total participants count for display
+            setTotalParticipantsCount(totalCount);
+        }
+    } catch (error) {
+        console.error('Error fetching participants:', error);
+        setParticipants([]);
+        // Set to 1 (just current user) on error
+        setTotalParticipantsCount(1);
+    } finally {
+        setLoading(false);
+    }
+};
 
     useEffect(() => {
         fetchParticipants();
@@ -304,15 +316,16 @@ const renderParticipantItem = ({ item, index }) => {
                 </View>
 
                 {/* Stats Section */}
-                <View style={styles.statsContainer}>
-                    <View style={styles.statsRow}>
-                        <View style={styles.statItem}>
-                            <View style={styles.statIconContainer}>
-                                <Icon name="group" size={24} color="#4F46E5" />
-                            </View>
-                            <Text style={styles.statNumber}>{participants.length}</Text>
-                            <Text style={styles.statLabel}>Participants</Text>
-                        </View>
+               <View style={styles.statsContainer}>
+    <View style={styles.statsRow}>
+        <View style={styles.statItem}>
+            <View style={styles.statIconContainer}>
+                <Icon name="group" size={24} color="#4F46E5" />
+            </View>
+            {/* Show totalParticipantsCount instead of participants.length */}
+            <Text style={styles.statNumber}>{totalParticipantsCount}</Text>
+            <Text style={styles.statLabel}>Participants</Text>
+        </View>
                         <View style={styles.statDivider} />
                         <View style={styles.statItem}>
                             <View style={styles.statIconContainer}>
@@ -334,14 +347,15 @@ const renderParticipantItem = ({ item, index }) => {
                 
                 {/* Participants Section */}
                 <View style={styles.participantsContainer}>
-                    <View style={styles.participantsHeader}>
-                        <Text style={styles.participantsTitle}>
-                            Participants ({participants.length})
-                        </Text>
-                        <View style={styles.refreshIndicator}>
-                            <Icon name="sync" size={16} color="#94A3B8" />
-                        </View>
-                    </View>
+    <View style={styles.participantsHeader}>
+        {/* Show totalParticipantsCount instead of participants.length */}
+        <Text style={styles.participantsTitle}>
+            Participants ({totalParticipantsCount})
+        </Text>
+        <View style={styles.refreshIndicator}>
+            <Icon name="sync" size={16} color="#94A3B8" />
+        </View>
+    </View>
                     
                     <View style={styles.participantsList}>
                         {participants.length > 0 ? (

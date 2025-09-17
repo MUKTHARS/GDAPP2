@@ -91,6 +91,34 @@ export default function WaitingScreen({ navigation, route }) {
             navigationLockRef.current = false;
         };
     }, []);
+useEffect(() => {
+    // Prevent going back if survey was completed
+    if (route.params?.surveyCompleted) {
+        navigation.setOptions({
+            gestureEnabled: false,
+            headerLeft: () => null
+        });
+    }
+}, [navigation, route.params?.surveyCompleted]);
+
+// back button handler
+useEffect(() => {
+    const backAction = () => {
+        if (route.params?.surveyCompleted) {
+            // Don't allow going back if survey was completed
+            return true;
+        }
+        return false;
+    };
+
+    const backHandler = BackHandler.addEventListener(
+        "hardwareBackPress",
+        backAction
+    );
+
+    return () => backHandler.remove();
+}, [route.params?.surveyCompleted]);
+
 
     useEffect(() => {
         // Initial check
