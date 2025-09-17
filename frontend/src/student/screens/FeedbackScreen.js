@@ -41,7 +41,6 @@ const handleSubmit = async () => {
 
     setSubmitting(true);
     try {
-        // Make sure we're sending the data in the correct format
         console.log('Submitting feedback:', {
             session_id: sessionId,
             rating: rating,
@@ -49,8 +48,12 @@ const handleSubmit = async () => {
         });
         
         await api.student.submitFeedback(sessionId, rating, comments);
-        Alert.alert('Success', 'Thank you for your feedback!');
-        navigation.navigate('SessionBooking');
+        Alert.alert('Success', 'Thank you for your feedback!', [
+            {
+                text: 'OK',
+                onPress: () => navigation.navigate('SessionBooking') // Add navigation here
+            }
+        ]);
     } catch (error) {
         console.error('Feedback submission error details:', error.response?.data || error.message);
         Alert.alert('Error', 'Failed to submit feedback. Please try again.');

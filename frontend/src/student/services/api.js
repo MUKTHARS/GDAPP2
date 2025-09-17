@@ -392,17 +392,18 @@ submitFeedback: (sessionId, rating, comments) => {
     session_id: sessionId,
     rating: rating,
     comments: comments
-  }).then(response => {
-    // Add navigation after successful feedback submission
-    if (response.status === 200 || response.data.status === 'success') {
-      // Use a small timeout to ensure the response is processed first
-      setTimeout(() => {
-        // Navigate to home screen
-        navigation.navigate('SessionBooking');
-      }, 100);
-    }
-    return response;
-  });
+  })
+  // .then(response => {
+  // //   // Add navigation after successful feedback submission
+  // //   if (response.status === 200 || response.data.status === 'success') {
+  // //     // Use a small timeout to ensure the response is processed first
+  // //     setTimeout(() => {
+  // //       // Navigate to home screen
+  // //       navigation.navigate('SessionBooking');
+  // //     }, 100);
+  // //   }
+  // //   return response;
+  // });
 },
 getFeedback: (sessionId) => api.get('/student/feedback/get', {
     params: { session_id: sessionId },
