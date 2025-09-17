@@ -1,33 +1,106 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Modal, Text } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, TouchableOpacity, Modal, Text, Alert } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { CommonActions } from '@react-navigation/native';
 import auth from '../services/auth';
 
 const IconMenuModal = ({ visible, onClose, navigation }) => {
+  const [confirmNavigation, setConfirmNavigation] = useState(null);
   const menuItems = [
     { name: 'SessionBooking', icon: 'home', label: 'Home' },
     { name: 'QrScanner', icon: 'qr-code-scanner', label: 'Scan QR' },
-      { name: 'Profile', icon: 'person', label: 'Profile' },
+    { name: 'Profile', icon: 'person', label: 'Profile' },
   ];
 
+  // List of session screens where confirmation is required
+  const sessionScreens = ['Lobby', 'GdSession', 'Survey', 'Waiting', 'Results'];
+
+  const getCurrentScreen = () => {
+    const state = navigation.getState();
+    return state.routes[state.index]?.name;
+  };
+
   const handleNavigation = (screenName) => {
+    const currentScreen = getCurrentScreen();
+    
+    // Check if user is in a session screen and trying to navigate to non-session screen
+    if (sessionScreens.includes(currentScreen) && !sessionScreens.includes(screenName)) {
+      setConfirmNavigation(screenName);
+      Alert.alert(
+        'Leave Session?',
+        'Are you sure you want to leave the current session? This action may affect your participation.',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => setConfirmNavigation(null)
+          },
+          {
+            text: 'Yes, Leave',
+            style: 'destructive',
+            onPress: () => {
+              navigateToScreen(screenName);
+              setConfirmNavigation(null);
+            }
+          }
+        ]
+      );
+    } else {
+      navigateToScreen(screenName);
+    }
+  };
+
+  const navigateToScreen = (screenName) => {
     navigation.navigate(screenName);
     onClose();
   };
 
   const handleLogout = async () => {
-    try {
-      await auth.logout();
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: 'Login' }],
-        })
+    const currentScreen = getCurrentScreen();
+    
+    // Check if user is in a session screen
+    if (sessionScreens.includes(currentScreen)) {
+      Alert.alert(
+        'Leave Session to Logout?',
+        'You are currently in a session. Are you sure you want to logout? This will remove you from the session.',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Yes, Logout',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await auth.logout();
+                navigation.dispatch(
+                  CommonActions.reset({
+                    index: 0,
+                    routes: [{ name: 'Login' }],
+                  })
+                );
+              } catch (error) {
+                console.error('Logout failed:', error);
+                Alert.alert('Error', 'Failed to logout');
+              }
+            }
+          }
+        ]
       );
-    } catch (error) {
-      console.error('Logout failed:', error);
-      Alert.alert('Error', 'Failed to logout');
+    } else {
+      try {
+        await auth.logout();
+        navigation.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: 'Login' }],
+          })
+        );
+      } catch (error) {
+        console.error('Logout failed:', error);
+        Alert.alert('Error', 'Failed to logout');
+      }
     }
   };
 
@@ -50,6 +123,7 @@ const IconMenuModal = ({ visible, onClose, navigation }) => {
               style={styles.menuItem}
               onPress={() => handleNavigation(item.name)}
               activeOpacity={0.8}
+              disabled={confirmNavigation === item.name}
             >
               <View style={styles.menuItemGradient}>
                 <Icon name={item.icon} size={24} color="#F8FAFC" />
