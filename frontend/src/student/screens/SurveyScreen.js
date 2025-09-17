@@ -198,28 +198,6 @@ useEffect(() => {
         }
     };
     
-    // const handleTimeout = async () => {
-    //     if (!penalties[currentQuestion]) {
-    //         try {
-    //             const authData = await auth.getAuthData();
-    //             await api.student.applyQuestionPenalty(
-    //                 sessionId,
-    //                 currentQuestion + 1,
-    //                 authData.userId
-    //             );
-    //             setPenalties(prev => ({
-    //                 ...prev,
-    //                 [currentQuestion]: true
-    //             }));
-    //             // Alert.alert(
-    //             //     "Time's Up!", 
-    //             //     "You've been penalized 0.5 points for not completing this question in time"
-    //             // );
-    //         } catch (err) {
-    //             console.log('Penalty application error:', err);
-    //         }
-    //     }
-    // };
     
     startTimer();
     

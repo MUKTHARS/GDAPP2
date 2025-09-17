@@ -6,7 +6,25 @@ import StudentStack from './StudentStack';
 
 const Stack = createStackNavigator();
 
-// Wrap all screen components with the AppSwitchBlocker
+// Create a modified AppSwitchBlocker that excludes certain screens
+const SelectiveAppSwitchBlocker = (WrappedComponent) => {
+  return (props) => {
+    // Get the current route name from navigation state
+    const currentRoute = props.navigation?.getState()?.routes?.[props.navigation?.getState()?.index]?.name;
+    
+    // Don't apply blocking to these screens
+    const excludedScreens = ['SessionBooking', 'QrScanner'];
+    
+    if (excludedScreens.includes(currentRoute)) {
+      return <WrappedComponent {...props} />;
+    }
+    
+    // Apply AppSwitchBlocker to other screens
+    const ProtectedComponent = AppSwitchBlocker(WrappedComponent);
+    return <ProtectedComponent {...props} />;
+  };
+};
+
 const ProtectedStudentStack = ({ onAdminSwitch }) => {
   return (
     <Stack.Navigator>
@@ -25,7 +43,7 @@ const ProtectedStudentStack = ({ onAdminSwitch }) => {
   );
 };
 
-// Apply AppSwitchBlocker to all screens in the StudentStack
-const ProtectedStack = AppSwitchBlocker(ProtectedStudentStack);
+// Apply SelectiveAppSwitchBlocker instead of regular AppSwitchBlocker
+const ProtectedStack = SelectiveAppSwitchBlocker(ProtectedStudentStack);
 
 export default ProtectedStack;

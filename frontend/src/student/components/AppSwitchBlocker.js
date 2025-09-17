@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BackHandler, Alert, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRoute } from '@react-navigation/native';
 
 const APP_SWITCH_WARNING_KEY = 'app_switch_warning_count';
 
@@ -8,6 +9,7 @@ const AppSwitchBlocker = (WrappedComponent) => {
   return (props) => {
     const [appState, setAppState] = useState(AppState.currentState);
     const [warningCount, setWarningCount] = useState(0);
+    const route = useRoute(); // Get the current route
 
     useEffect(() => {
       // Load warning count from storage
@@ -24,6 +26,11 @@ const AppSwitchBlocker = (WrappedComponent) => {
     }, []);
 
     useEffect(() => {
+      // Skip app switch blocking for SessionBooking and QrScanner screens
+      if (route.name === 'SessionBooking' || route.name === 'QrScanner') {
+        return;
+      }
+
       // Handle app state changes
       const handleAppStateChange = async (nextAppState) => {
         if (appState.match(/active|foreground/) && nextAppState === 'background') {
@@ -46,7 +53,7 @@ const AppSwitchBlocker = (WrappedComponent) => {
         subscription.remove();
         backHandler.remove();
       };
-    }, [appState, warningCount]);
+    }, [appState, warningCount, route.name]); // Add route.name to dependencies
 
     const handleAppSwitch = async () => {
       if (warningCount >= 1) {
