@@ -21,55 +21,88 @@ export default function WaitingScreen({ navigation, route }) {
     const [hasNavigatedToResults, setHasNavigatedToResults] = useState(false);
     const navigationLockRef = useRef(false); // Use ref for navigation lock
 
-    const checkCompletionStatus = async () => {
-        // Prevent multiple navigation attempts using ref for immediate access
-        if (isNavigating || navigationLockRef.current) return;
+   const checkCompletionStatus = async () => {
+    // Add additional check to prevent navigation if we're already on Results
+    const currentRoute = navigation.getState()?.routes?.[navigation.getState().index]?.name;
+    if (currentRoute === 'Results' || isNavigating || navigationLockRef.current) return;
+    
+    try {
+        const response = await api.student.checkSurveyCompletion(sessionId);
         
-        try {
-            const response = await api.student.checkSurveyCompletion(sessionId);
+        console.log('Completion check response:', response.data);
+        
+        if (response.data) {
+            const responseData = response.data;
             
-            console.log('Completion check response:', response.data);
+            const completed = Number(responseData.completed) || Number(responseData.data?.completed) || 0;
+            const total = Number(responseData.total) || Number(responseData.data?.total) || 0;
             
-            if (response.data) {
-                const responseData = response.data;
-                
-                // Handle different response structures
-                const completed = Number(responseData.completed) || Number(responseData.data?.completed) || 0;
-                const total = Number(responseData.total) || Number(responseData.data?.total) || 0;
-                
-                console.log('Completion status - Completed:', completed, 'Total:', total);
-                
-                // Wait for ALL participants to complete
-                const allCompletedNow = completed >= total && total > 0;
-                
-                setStatus({
-                    allCompleted: allCompletedNow,
-                    completed,
-                    total
-                });
-                setLastUpdate(Date.now());
+            console.log('Completion status - Completed:', completed, 'Total:', total);
+            
+            // Wait for ALL participants to complete
+            const allCompletedNow = completed >= total && total > 0;
+            
+            setStatus({
+                allCompleted: allCompletedNow,
+                completed,
+                total
+            });
+            setLastUpdate(Date.now());
 
-                // Only navigate when ALL participants have completed AND we're not already navigating
-                if (allCompletedNow && !isNavigating && !navigationLockRef.current) {
-                    setIsNavigating(true);
-                    navigationLockRef.current = true; // Lock navigation immediately
-                    setHasNavigatedToResults(true);
-                    console.log('ALL participants completed, navigating to Results');
-                    clearInterval(pollingRef.current);
-                    
-                    // Use a small timeout to ensure the navigation lock is set
-                    setTimeout(() => {
-                        navigation.replace('Results', { sessionId });
-                    }, 100);
-                }
+            // Only navigate when ALL participants have completed AND we're not already navigating
+            if (allCompletedNow && !isNavigating && !navigationLockRef.current) {
+                setIsNavigating(true);
+                navigationLockRef.current = true;
+                setHasNavigatedToResults(true);
+                console.log('ALL participants completed, navigating to Results');
+                clearInterval(pollingRef.current);
+                
+                // Use replace instead of navigate to prevent going back to Waiting
+                navigation.replace('Results', { sessionId });
             }
-        } catch (err) {
-            console.error('Completion check error:', err);
-            setError('Failed to check completion status');
-        } finally {
-            setLoading(false);
+        }
+    } catch (err) {
+        console.error('Completion check error:', err);
+        setError('Failed to check completion status');
+    } finally {
+        setLoading(false);
+    }
+};
+
+   useEffect(() => {
+    // Clear any navigation history that might cause loops
+    const resetNavigation = () => {
+        const routes = navigation.getState()?.routes || [];
+        const currentRoute = routes[routes.length - 1];
+        
+        // If we're on the Waiting screen but somehow have Survey in history, reset
+        if (currentRoute?.name === 'Waiting') {
+            const hasSurveyInHistory = routes.some(route => route.name === 'Survey');
+            if (hasSurveyInHistory) {
+                // Reset navigation to prevent going back to Survey
+                navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'Waiting', params: { sessionId } }],
+                });
+            }
         }
     };
+
+    resetNavigation();
+}, [navigation, sessionId]);
+   
+   useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+        // Prevent going back to Survey if we've already completed it
+        if (hasNavigatedToResults && e.data.action.type === 'POP') {
+            e.preventDefault();
+            // Instead of going back, navigate forward to Results
+            navigation.navigate('Results', { sessionId });
+        }
+    });
+
+    return unsubscribe;
+}, [navigation, sessionId, hasNavigatedToResults]);
 
     useEffect(() => {
         // Check if we're coming back to Waiting after already navigating to Results
