@@ -32,13 +32,14 @@ const ResultItem = ({ item, index }) => {
   };
 
   // Generate penalty details based on biased questions count
- const penaltyDetails = biasedQuestions > 0 ? [
+const penaltyDetails = biasedQuestions > 0 ? [
     { 
-      points: penaltyPoints, 
-      reason: `${biasedQuestions} biased ranking(s)`, 
-      description: 'Deviated significantly from consensus ratings'
+        points: penaltyPoints, 
+        reason: `${biasedQuestions} biased rating(s)`, 
+        description: 'Significant deviation from group consensus'
     }
-  ] : [];
+] : [];
+
 
  
   return (
@@ -96,27 +97,27 @@ const ResultItem = ({ item, index }) => {
 
             {/* Penalty Details */}
             {showPenaltyDetails && penaltyPoints > 0 && (
-              <View style={styles.penaltyDetailsContainer}>
-                <View style={styles.penaltyDetailItem}>
-                  <Icon name="warning" size={14} color="#F59E0B" />
-                  <Text style={styles.penaltyDetailText}>
-                    {biasedQuestions} biased ranking{biasedQuestions !== 1 ? 's' : ''}
-                  </Text>
-                </View>
-                <View style={styles.penaltyDetailItem}>
-                  <Icon name="error-outline" size={12} color="#EF4444" />
-                  <Text style={styles.penaltyDetailSmallText}>
-                    Ratings differed significantly from group consensus
-                  </Text>
-                </View>
-                <View style={styles.penaltyDetailItem}>
-                  <Icon name="info-outline" size={12} color="#3B82F6" />
-                  <Text style={styles.penaltyDetailSmallText}>
-                    -1 point per significant deviation
-                  </Text>
-                </View>
-              </View>
-            )}
+    <View style={styles.penaltyDetailsContainer}>
+        <View style={styles.penaltyDetailItem}>
+            <Icon name="warning" size={14} color="#F59E0B" />
+            <Text style={styles.penaltyDetailText}>
+                {biasedQuestions} biased rating{biasedQuestions !== 1 ? 's' : ''}
+            </Text>
+        </View>
+        <View style={styles.penaltyDetailItem}>
+            <Icon name="error-outline" size={12} color="#EF4444" />
+            <Text style={styles.penaltyDetailSmallText}>
+                Ratings differed significantly from group consensus
+            </Text>
+        </View>
+        <View style={styles.penaltyDetailItem}>
+            <Icon name="info-outline" size={12} color="#3B82F6" />
+            <Text style={styles.penaltyDetailSmallText}>
+                -1 point per significant deviation
+            </Text>
+        </View>
+    </View>
+)}
           </View>
         </View>
       </View>

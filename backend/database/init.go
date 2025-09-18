@@ -53,6 +53,7 @@ func InitDB(db *sql.DB) error {
             topic TEXT NOT NULL,
             venue_id VARCHAR(36),
             level INT NOT NULL,
+            topic_id VARCHAR(36) NULL,
             start_time TIMESTAMP NOT NULL,
              qr_group_id VARCHAR(36) NULL,
             end_time DATETIME NOT NULL,
@@ -63,6 +64,7 @@ func InitDB(db *sql.DB) error {
             created_by VARCHAR(36),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE CASCADE,
+            FOREIGN KEY (topic_id) REFERENCES gd_topics(id),
             FOREIGN KEY (created_by) REFERENCES admin_users(id) ON DELETE SET NULL
         )`,
 
@@ -207,14 +209,14 @@ func InitDB(db *sql.DB) error {
     ranks INT NOT NULL,  
     score DECIMAL(5,2) NOT NULL,         
     weighted_score DECIMAL(5,2) NOT NULL,
-    penalty_points DECIMAL(3,1) DEFAULT 0.0,
+    penalty_points FLOAT DEFAULT 0,
     is_biased BOOLEAN DEFAULT FALSE,
     is_current_session TINYINT(1) DEFAULT 0,
     is_completed BOOLEAN DEFAULT FALSE,
     expected_ranks JSON DEFAULT NULL,
     average_score DECIMAL(5,2) DEFAULT 0.0,
      median_score DECIMAL(5,2) DEFAULT 0.00,
-deviation DECIMAL(5,2) DEFAULT 0.0,
+deviation FLOAT DEFAULT 0,
 penalty_calculated BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 /**    Dont remove this ----- >

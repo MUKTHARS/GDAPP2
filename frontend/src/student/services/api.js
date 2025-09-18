@@ -548,8 +548,58 @@ checkQuestionTimeout: (sessionId, questionId) => api.get('/student/survey/check-
     }
 },
 
-getSessionTopic: (level) => api.get('/student/topic', { 
-  params: { level },
+getTopic: (level) => api.get('/student/topic', { 
+    params: { level },
+    validateStatus: function (status) {
+      return status < 500;
+    },
+    transformResponse: [
+      function (data) {
+        try {
+          const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+          
+          // Ensure we always return an object with the expected structure
+          return {
+            topic_text: parsed.topic_text || "Discuss the impact of technology on modern education",
+            prep_materials: parsed.prep_materials || {
+              key_points: "",
+              references: "",
+              discussion_angles: ""
+            },
+            level: parsed.level || level,
+            ...parsed
+          };
+        } catch (e) {
+          console.error('Topic response parsing error:', e);
+          return {
+            topic_text: "Discuss the impact of technology on modern education",
+            prep_materials: {
+              key_points: "",
+              references: "",
+              discussion_angles: ""
+            },
+            level: level
+          };
+        }
+      }
+    ]
+  }).catch(error => {
+    console.error('Topic API error:', error);
+    return {
+      data: {
+        topic_text: "Discuss the impact of technology on modern education",
+        prep_materials: {
+          key_points: "",
+          references: "",
+          discussion_angles: ""
+        },
+        level: level
+      }
+    };
+  }),
+
+getSessionTopic: (sessionId) => api.get('/student/session/topic', { 
+  params: { session_id: sessionId },
   validateStatus: function (status) {
     return status < 500;
   },
@@ -557,31 +607,28 @@ getSessionTopic: (level) => api.get('/student/topic', {
     function (data) {
       try {
         const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-        
-        // Ensure we always return an object with the expected structure
         return {
           topic_text: parsed.topic_text || "Discuss the impact of technology on modern education",
           prep_materials: parsed.prep_materials || {},
-          level: parsed.level || level, // Use the passed level parameter as fallback
-          ...parsed // Include any other properties that might exist
+          level: parsed.level || 1,
         };
       } catch (e) {
-        console.error('Topic response parsing error:', e);
+        console.error('Session topic parsing error:', e);
         return {
           topic_text: "Discuss the impact of technology on modern education",
           prep_materials: {},
-          level: level // Use the passed level parameter
+          level: 1
         };
       }
     }
   ]
 }).catch(error => {
-  console.error('Topic API error:', error);
+  console.error('Session topic API error:', error);
   return {
     data: {
       topic_text: "Discuss the impact of technology on modern education",
       prep_materials: {},
-      level: level // Use the passed level parameter
+      level: 1
     }
   };
 }),

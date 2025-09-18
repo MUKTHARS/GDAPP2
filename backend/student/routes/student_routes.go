@@ -42,7 +42,8 @@ func SetupStudentRoutes() *http.ServeMux {
 	// Survey System
 	router.Handle(baseurl+"/survey", middleware.StudentOnly(
 		http.HandlerFunc(controllers.SubmitSurvey)))
-
+router.Handle(baseurl+"/session/topic", middleware.StudentOnly(
+    http.HandlerFunc(controllers.GetSessionTopic)))
 	// Results
 	router.Handle(baseurl+"/results", middleware.StudentOnly(
 		http.HandlerFunc(controllers.GetResults)))

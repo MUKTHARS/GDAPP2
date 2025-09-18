@@ -1,8 +1,6 @@
-// C:\xampp\htdocs\GDAPPC\backend\admin\controllers\topic_controller.go
 package controllers
 
 import (
-	// "database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -14,11 +12,11 @@ import (
 )
 
 type Topic struct {
-	ID           string          `json:"id"`
-	Level        int             `json:"level"`
-	TopicText    string          `json:"topic_text"`
+	ID           string                 `json:"id"`
+	Level        int                    `json:"level"`
+	TopicText    string                 `json:"topic_text"`
 	PrepMaterials map[string]interface{} `json:"prep_materials"`
-	IsActive     bool            `json:"is_active"`
+	IsActive     bool                   `json:"is_active"`
 }
 
 func GetTopics(w http.ResponseWriter, r *http.Request) {
@@ -28,7 +26,7 @@ func GetTopics(w http.ResponseWriter, r *http.Request) {
 	var args []interface{}
 	
 	if level != "" {
-		query = "SELECT id, level, topic_text, prep_materials, is_active FROM gd_topics WHERE level = ? AND is_active = TRUE ORDER BY level, created_at DESC"
+		query = "SELECT id, level, topic_text, prep_materials, is_active FROM gd_topics WHERE level = ? ORDER BY level, created_at DESC"
 		levelInt, err := strconv.Atoi(level)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -37,7 +35,7 @@ func GetTopics(w http.ResponseWriter, r *http.Request) {
 		}
 		args = []interface{}{levelInt}
 	} else {
-		query = "SELECT id, level, topic_text, prep_materials, is_active FROM gd_topics WHERE is_active = TRUE ORDER BY level, created_at DESC"
+		query = "SELECT id, level, topic_text, prep_materials, is_active FROM gd_topics ORDER BY level, created_at DESC"
 	}
 
 	rows, err := database.GetDB().Query(query, args...)
@@ -62,7 +60,10 @@ func GetTopics(w http.ResponseWriter, r *http.Request) {
 		if len(prepMaterialsJSON) > 0 {
 			if err := json.Unmarshal(prepMaterialsJSON, &topic.PrepMaterials); err != nil {
 				log.Printf("Error parsing prep materials: %v", err)
+				topic.PrepMaterials = make(map[string]interface{})
 			}
+		} else {
+			topic.PrepMaterials = make(map[string]interface{})
 		}
 		
 		topics = append(topics, topic)
@@ -80,9 +81,9 @@ func CreateTopic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if topic.Level < 1 || topic.Level > 3 {
+	if topic.Level < 1 || topic.Level > 5 {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Level must be between 1 and 3"})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Level must be between 1 and 5"})
 		return
 	}
 
@@ -94,6 +95,11 @@ func CreateTopic(w http.ResponseWriter, r *http.Request) {
 
 	topic.ID = uuid.New().String()
 	
+	// Ensure prep_materials is never nil
+	if topic.PrepMaterials == nil {
+		topic.PrepMaterials = make(map[string]interface{})
+	}
+	
 	prepMaterialsJSON, err := json.Marshal(topic.PrepMaterials)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -103,8 +109,8 @@ func CreateTopic(w http.ResponseWriter, r *http.Request) {
 
 	_, err = database.GetDB().Exec(`
 		INSERT INTO gd_topics (id, level, topic_text, prep_materials, is_active)
-		VALUES (?, ?, ?, ?, ?)`,
-		topic.ID, topic.Level, topic.TopicText, prepMaterialsJSON, true,
+		VALUES (?, ?, ?, ?, TRUE)`,
+		topic.ID, topic.Level, topic.TopicText, prepMaterialsJSON,
 	)
 
 	if err != nil {
@@ -133,6 +139,11 @@ func UpdateTopic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Ensure prep_materials is never nil
+	if topic.PrepMaterials == nil {
+		topic.PrepMaterials = make(map[string]interface{})
+	}
+	
 	prepMaterialsJSON, err := json.Marshal(topic.PrepMaterials)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -142,9 +153,9 @@ func UpdateTopic(w http.ResponseWriter, r *http.Request) {
 
 	_, err = database.GetDB().Exec(`
 		UPDATE gd_topics 
-		SET level = ?, topic_text = ?, prep_materials = ?, is_active = ?
+		SET level = ?, topic_text = ?, prep_materials = ?
 		WHERE id = ?`,
-		topic.Level, topic.TopicText, prepMaterialsJSON, topic.IsActive, topic.ID,
+		topic.Level, topic.TopicText, prepMaterialsJSON, topic.ID,
 	)
 
 	if err != nil {
@@ -166,7 +177,7 @@ func DeleteTopic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := database.GetDB().Exec("UPDATE gd_topics SET is_active = FALSE WHERE id = ?", topicID)
+	_, err := database.GetDB().Exec("DELETE FROM gd_topics WHERE id = ?", topicID)
 	if err != nil {
 		log.Printf("Error deleting topic: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)

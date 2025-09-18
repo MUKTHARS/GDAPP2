@@ -35,16 +35,17 @@ useEffect(() => {
         const response = await api.student.getSessionPhase(sessionId);
         if (response.data.phase !== phase) {
           setPhase(response.data.phase);
-          const remainingSeconds = Math.max(0, 
-            (new Date(response.data.end_time) - new Date()) / 1000
-          );
-          setTimeRemaining(remainingSeconds);
+          // const remainingSeconds = Math.max(0, 
+          //   (new Date(response.data.end_time) - new Date()) / 1000
+          // );
+          setTimeRemaining(10);
         }
       } catch (error) {
         console.log("Using local phase state as fallback");
         // Force prep phase for new sessions
         if (isNewSession) {
           setPhase('prep');
+          setTimeRemaining(10); // need to be removed
           setIsNewSession(false);
         }
       }
@@ -125,88 +126,96 @@ useEffect(() => {
     return () => backHandler.remove();
   }, [navigation]);
 
-  // Fetch session details and topic
-  useEffect(() => {
-    if (!sessionId) {
-      setLoading(false);
-      return;
-    }
+useEffect(() => {
+  if (!sessionId) {
+    setLoading(false);
+    return;
+  }
 
-    const fetchSessionAndTopic = async () => {
-      try {
-        const authData = await auth.getAuthData();
-        
-        if (!authData?.token) {
-          throw new Error('Authentication required');
-        }
+  const fetchSessionAndTopic = async () => {
+    try {
+      const authData = await auth.getAuthData();
+      
+      if (!authData?.token) {
+        throw new Error('Authentication required');
+      }
 
-        // Fetch session details
-        const response = await api.student.getSession(sessionId);
-        
-        if (response.data?.error) {
-          throw new Error(response.data.error);
-        }
+      // Fetch session details
+      const response = await api.student.getSession(sessionId);
+      
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
 
-        if (!response.data || !response.data.id) {
-          throw new Error('Invalid session data received');
-        }
+      if (!response.data || !response.data.id) {
+        throw new Error('Invalid session data received');
+      }
 
-        const sessionData = response.data;
-        setSession(sessionData);
+      const sessionData = response.data;
+      sessionData.prep_time = 10; // need to be removed
+      sessionData.discussion_time = 10; // need to be removed
+      setSession(sessionData);
 
-        // Fetch topic for the session's level - FIXED THIS PART
-       try {
-  const topicResponse = await api.student.getSessionTopic(sessionData.level);
+      // Fetch topic for the session's level - ADD DEBUG LOGGING
+     try {
+  // Fetch session details first
+  const response = await api.student.getSession(sessionId);
+  const sessionData = response.data;
+  sessionData.prep_time = 10;
+  sessionData.discussion_time = 10;
+  setSession(sessionData);
+
+  // Fetch topic specifically for this session
+  console.log('Fetching topic for session:', sessionId);
+  const topicResponse = await api.student.getSessionTopic(sessionId);
+  console.log('Session topic response:', topicResponse.data);
   
-  // Check if the response structure is correct
   if (topicResponse.data && topicResponse.data.topic_text) {
+    console.log('Setting session topic:', topicResponse.data.topic_text);
     setTopic(topicResponse.data.topic_text);
-  } else if (topicResponse.data && typeof topicResponse.data === 'string') {
-    // Handle case where the response might be just the topic text
-    setTopic(topicResponse.data);
   } else {
-    // Use default topic if none found
+    console.log('Using default topic - no valid topic data found');
     setTopic("Discuss the impact of technology on modern education");
   }
 } catch (topicError) {
   console.log('Failed to fetch session topic:', topicError);
   setTopic("Discuss the impact of technology on modern education");
 }
-
-      } catch (error) {
-        console.error('Failed to load session:', error);
-        let errorMessage = error.message;
-        
-        if (error.response) {
-          if (error.response.status === 404) {
-            errorMessage = 'Session not found';
-          } else if (error.response.status === 403) {
-            errorMessage = 'Not authorized to view this session';
-          } else if (error.response.status === 500) {
-            errorMessage = 'Server error - please try again later';
-          }
+    } catch (error) {
+      console.error('Failed to load session:', error);
+      let errorMessage = error.message;
+      
+      if (error.response) {
+        if (error.response.status === 404) {
+          errorMessage = 'Session not found';
+        } else if (error.response.status === 403) {
+          errorMessage = 'Not authorized to view this session';
+        } else if (error.response.status === 500) {
+          errorMessage = 'Server error - please try again later';
         }
-        
-        Alert.alert(
-          'Session Error',
-          errorMessage,
-          [{ 
-            text: 'OK', 
-            onPress: () => navigation.goBack()
-          }]
-        );
-      } finally {
-        setLoading(false);
       }
-    };
+      
+      Alert.alert(
+        'Session Error',
+        errorMessage,
+        [{ 
+          text: 'OK', 
+          onPress: () => navigation.goBack()
+        }]
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    fetchSessionAndTopic();
-  }, [sessionId, navigation]);
+  fetchSessionAndTopic();
+}, [sessionId, navigation]);
 
   const handlePhaseComplete = () => {
     if (phase === 'prep') {
       setPhase('discussion');
-      setTimeRemaining(session.discussion_time * 60);
+        setTimeRemaining(10);
+      // setTimeRemaining(session.discussion_time * 60);  -- need to be uncommented
     } else if (phase === 'discussion') {
       
       navigation.navigate('Survey', { 
@@ -308,8 +317,11 @@ useEffect(() => {
             <View style={styles.timerWrapper}>
                <Timer 
     duration={
-      phase === 'prep' ? session.prep_time * 60 : 
-      phase === 'discussion' ? session.discussion_time * 60 : 
+
+       phase === 'prep' ? 10 : 
+    phase === 'discussion' ? 10 :
+      // phase === 'prep' ? session.prep_time * 60 : 
+      // phase === 'discussion' ? session.discussion_time * 60 : 
       1 
     }
     onComplete={handlePhaseComplete}
