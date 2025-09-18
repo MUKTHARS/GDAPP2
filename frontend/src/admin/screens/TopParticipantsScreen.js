@@ -37,16 +37,16 @@ export default function TopParticipantsScreen() {
     fetchTopParticipants();
   }, [selectedLevel]);
 
-  const renderSessionItem = ({ item }) => (
+const renderSessionItem = ({ item }) => (
+  
   <View style={styles.sessionCard}>
     <Text style={styles.sessionTitle}>
-      Session: {item.session_id.substring(0, 8)}
+      {item.venue_name || 'Unknown Venue'} - Session: {item.session_id.substring(0, 8)}
     </Text>
     <Text style={styles.sessionDetails}>
-      Level {item.session_level} | {item.venue_name || 'No Venue'}
+      Level {item.session_level} | {new Date(item.session_date).toLocaleDateString()}
     </Text>
-    <Text style={styles.sessionDate}>
-      {new Date(item.session_date).toLocaleDateString()} at{' '}
+    <Text style={styles.sessionTime}>
       {new Date(item.session_date).toLocaleTimeString([], { 
         hour: '2-digit', 
         minute: '2-digit' 
@@ -65,9 +65,17 @@ export default function TopParticipantsScreen() {
           <View style={styles.participantInfo}>
             <Text style={styles.name}>{participant.name}</Text>
             <Text style={styles.details}>
-              Student Level: {participant.student_level} | Score: {participant.total_score.toFixed(1)}
+              Level: {participant.student_level} | 
+              Score: {participant.final_score?.toFixed(1) || participant.total_score?.toFixed(1) || '0.0'}
             </Text>
-            <Text style={styles.avgScore}>Avg: {participant.avg_score.toFixed(1)}</Text>
+            {participant.total_penalty > 0 && (
+              <Text style={styles.penaltyText}>
+                Penalty: -{participant.total_penalty.toFixed(1)}
+              </Text>
+            )}
+            <Text style={styles.avgScore}>
+              Avg: {participant.avg_score?.toFixed(1) || '0.0'}
+            </Text>
           </View>
         </View>
       ))
@@ -288,16 +296,33 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 20,
   },
-   sessionDetails: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginBottom: 4,
-    fontWeight: '500',
-  },
   sessionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
+    color: colors.primaryText,
     marginBottom: 4,
-    color: colors.textPrimary,
   },
+  sessionDetails: {
+    fontSize: 14,
+    color: colors.secondaryText,
+    marginBottom: 2,
+  },
+  sessionTime: {
+    fontSize: 12,
+    color: colors.secondaryText,
+    marginBottom: 8,
+    fontStyle: 'italic',
+  },
+  penaltyText: {
+    fontSize: 12,
+    color: '#EF4444',
+   fontWeight: '500',
+  },
+  venueName: {
+  fontSize: 18,
+  fontWeight: 'bold',
+  color: colors.primary,
+  marginBottom: 4,
+},
+
 });
