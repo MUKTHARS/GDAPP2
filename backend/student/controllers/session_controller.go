@@ -45,7 +45,7 @@ type ReadyStatus struct {
     Timestamp string `json:"timestamp"`
 }
 
-func UpdateReadyStatus(w http.ResponseWriter, r *http.Request)  {
+func UpdateReadyStatus(w http.ResponseWriter, r *http.Request) {
     studentID := r.Context().Value("studentID").(string)
     
     var req struct {

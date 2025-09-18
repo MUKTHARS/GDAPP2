@@ -308,10 +308,10 @@ checkSurveyCompletion: (sessionId) => api.get('/student/survey/completion', {
             try {
                 const parsed = typeof data === 'string' ? JSON.parse(data) : data;
                 return {
-                    all_completed: parsed.all_completed === true, // Ensure boolean
+                    all_completed: parsed.all_completed === true, 
                     completed: parsed.completed || 0,
                     total: parsed.total || 0,
-                    session_active: parsed.session_active !== false // Default to true if not specified
+                    session_active: parsed.session_active !== false 
                 };
             } catch (e) {
                 console.error('Completion check parse error:', e);

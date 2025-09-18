@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, BackHandler, Alert, TouchableOpacity } from 'react-native';
 import api from '../services/api';
@@ -5,7 +6,6 @@ import { globalStyles, colors, layout } from '../assets/globalStyles';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import HamburgerHeader from '../components/HamburgerHeader';
-
 export default function WaitingScreen({ navigation, route }) {
     const { sessionId } = route.params;
     const [status, setStatus] = useState({
@@ -17,14 +17,10 @@ export default function WaitingScreen({ navigation, route }) {
     const [error, setError] = useState(null);
     const pollingRef = useRef(null);
     const [lastUpdate, setLastUpdate] = useState(Date.now());
-    const [isNavigating, setIsNavigating] = useState(false);
-    const [hasNavigatedToResults, setHasNavigatedToResults] = useState(false);
-    const navigationLockRef = useRef(false); // Use ref for navigation lock
+const [isNavigating, setIsNavigating] = useState(false);
 
-   const checkCompletionStatus = async () => {
-    // Add additional check to prevent navigation if we're already on Results
-    const currentRoute = navigation.getState()?.routes?.[navigation.getState().index]?.name;
-    if (currentRoute === 'Results' || isNavigating || navigationLockRef.current) return;
+const checkCompletionStatus = async () => {
+    if (isNavigating) return; // Prevent multiple navigation attempts
     
     try {
         const response = await api.student.checkSurveyCompletion(sessionId);
@@ -34,6 +30,7 @@ export default function WaitingScreen({ navigation, route }) {
         if (response.data) {
             const responseData = response.data;
             
+            // Handle different response structures
             const completed = Number(responseData.completed) || Number(responseData.data?.completed) || 0;
             const total = Number(responseData.total) || Number(responseData.data?.total) || 0;
             
@@ -50,15 +47,17 @@ export default function WaitingScreen({ navigation, route }) {
             setLastUpdate(Date.now());
 
             // Only navigate when ALL participants have completed AND we're not already navigating
-            if (allCompletedNow && !isNavigating && !navigationLockRef.current) {
+            if (allCompletedNow && !isNavigating) {
                 setIsNavigating(true);
-                navigationLockRef.current = true;
-                setHasNavigatedToResults(true);
                 console.log('ALL participants completed, navigating to Results');
                 clearInterval(pollingRef.current);
                 
-                // Use replace instead of navigate to prevent going back to Waiting
-                navigation.replace('Results', { sessionId });
+                setTimeout(() => {
+                    navigation.reset({
+                        index: 0,
+                        routes: [{ name: 'Results', params: { sessionId } }],
+                    });
+                }, 100);
             }
         }
     } catch (err) {
@@ -69,122 +68,47 @@ export default function WaitingScreen({ navigation, route }) {
     }
 };
 
-   useEffect(() => {
-    // Clear any navigation history that might cause loops
-    const resetNavigation = () => {
-        const routes = navigation.getState()?.routes || [];
-        const currentRoute = routes[routes.length - 1];
-        
-        // If we're on the Waiting screen but somehow have Survey in history, reset
-        if (currentRoute?.name === 'Waiting') {
-            const hasSurveyInHistory = routes.some(route => route.name === 'Survey');
-            if (hasSurveyInHistory) {
-                // Reset navigation to prevent going back to Survey
-                navigation.reset({
-                    index: 0,
-                    routes: [{ name: 'Waiting', params: { sessionId } }],
-                });
-            }
-        }
-    };
 
-    resetNavigation();
-}, [navigation, sessionId]);
-   
-   useEffect(() => {
-    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
-        // Prevent going back to Survey if we've already completed it
-        if (hasNavigatedToResults && e.data.action.type === 'POP') {
-            e.preventDefault();
-            // Instead of going back, navigate forward to Results
-            navigation.navigate('Results', { sessionId });
-        }
-    });
-
-    return unsubscribe;
-}, [navigation, sessionId, hasNavigatedToResults]);
-
-    useEffect(() => {
-        // Check if we're coming back to Waiting after already navigating to Results
-        const unsubscribe = navigation.addListener('focus', () => {
-            // If we've already navigated to Results but somehow came back to Waiting,
-            // immediately navigate back to Results and stop polling
-            if (hasNavigatedToResults || navigationLockRef.current) {
-                clearInterval(pollingRef.current);
-                navigation.replace('Results', { sessionId });
-            }
-        });
-
-        return unsubscribe;
-    }, [navigation, sessionId, hasNavigatedToResults]);
-
-    useEffect(() => {
-        // Clear navigation lock when component unmounts
-        return () => {
-            navigationLockRef.current = false;
-        };
-    }, []);
 useEffect(() => {
-    // Prevent going back if survey was completed
-    if (route.params?.surveyCompleted) {
-        navigation.setOptions({
-            gestureEnabled: false,
-            headerLeft: () => null
+    // Safety check: If we somehow end up back on Waiting after seeing Results,
+    // navigate back to Results
+    const currentRoute = navigation.getState()?.routes?.[navigation.getState().index]?.name;
+    if (currentRoute === 'Waiting' && status.allCompleted) {
+        navigation.reset({
+            index: 0,
+            routes: [{ name: 'Results', params: { sessionId } }],
         });
     }
-}, [navigation, route.params?.surveyCompleted]);
+}, [navigation, sessionId, status.allCompleted]);
 
-// back button handler
 useEffect(() => {
-    const backAction = () => {
-        if (route.params?.surveyCompleted) {
-            // Don't allow going back if survey was completed
+    // Initial check
+    checkCompletionStatus();
+
+    // Start polling every 3 seconds
+    pollingRef.current = setInterval(checkCompletionStatus, 3000);
+
+    // Handle back button
+    const backHandler = BackHandler.addEventListener(
+        'hardwareBackPress',
+        () => {
+            Alert.alert(
+                "Waiting for Results",
+                "Are you sure you want to leave? You won't see the results if you exit now.",
+                [
+                    { text: "Cancel", onPress: () => null },
+                    { text: "Exit", onPress: () => navigation.goBack() }
+                ]
+            );
             return true;
         }
-        return false;
-    };
-
-    const backHandler = BackHandler.addEventListener(
-        "hardwareBackPress",
-        backAction
     );
 
-    return () => backHandler.remove();
-}, [route.params?.surveyCompleted]);
-
-
-    useEffect(() => {
-        // Initial check
-        checkCompletionStatus();
-
-        // Start polling every 3 seconds
-        pollingRef.current = setInterval(checkCompletionStatus, 3000);
-
-        // Handle back button
-        const backHandler = BackHandler.addEventListener(
-            'hardwareBackPress',
-            () => {
-                Alert.alert(
-                    "Waiting for Results",
-                    "Are you sure you want to leave? You won't see the results if you exit now.",
-                    [
-                        { text: "Cancel", onPress: () => null },
-                        { text: "Exit", onPress: () => {
-                            clearInterval(pollingRef.current);
-                            navigation.goBack();
-                        }}
-                    ]
-                );
-                return true;
-            }
-        );
-
-        return () => {
-            clearInterval(pollingRef.current);
-            backHandler.remove();
-            navigationLockRef.current = false; // Clean up navigation lock
-        };
-    }, [sessionId]);
+    return () => {
+        clearInterval(pollingRef.current);
+        backHandler.remove();
+    };
+}, [sessionId, isNavigating]);
 
     if (loading) {
         return (
