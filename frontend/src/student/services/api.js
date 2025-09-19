@@ -686,6 +686,29 @@ updateReadyStatus: (sessionId, isReady) => api.post('/student/session/ready', {
   checkAllReady: (sessionId) => api.get('/student/session/check-all-ready', {
     params: { session_id: sessionId }
   }),
+
+  startSessionTimer: (sessionId, phase, duration) => api.post('/student/session/timer/start', {
+    session_id: sessionId,
+    phase: phase,
+    duration_seconds: duration
+}),
+
+getSessionTimer: (sessionId) => api.get('/student/session/timer', {
+    params: { session_id: sessionId },
+    validateStatus: function (status) {
+        return status < 500;
+    }
+}),
+
+completeSessionPhase: (sessionId) => api.post('/student/session/phase/complete', {
+    session_id: sessionId
+}),
+getSessionConfiguration: (sessionId) => api.get('/student/session/configuration', {
+    params: { session_id: sessionId },
+    validateStatus: function (status) {
+        return status < 500;
+    }
+}),
   };
 
 

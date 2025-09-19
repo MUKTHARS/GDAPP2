@@ -421,7 +421,16 @@ WHERE id = NEW.id`,
     UNIQUE KEY (session_id, student_id)
 )`,
 
-
+`CREATE TABLE IF NOT EXISTS session_timers (
+    session_id VARCHAR(36) PRIMARY KEY,
+    phase ENUM('prep', 'discussion', 'survey') NOT NULL,
+    start_time DATETIME NOT NULL,
+    duration_seconds INT NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE
+)`,
     }
 
     for _, query := range createTables {

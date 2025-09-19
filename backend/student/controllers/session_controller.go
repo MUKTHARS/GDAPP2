@@ -3168,3 +3168,557 @@ func clearSessionReadyStatus(sessionID string) error {
     
     return tx.Commit()
 }
+
+
+
+// Get current timer status
+func GetSessionTimer(w http.ResponseWriter, r *http.Request) {
+    sessionID := r.URL.Query().Get("session_id")
+    if sessionID == "" {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
+        return
+    }
+
+    studentID := r.Context().Value("studentID").(string)
+    
+    // Verify student is part of this session
+    var isParticipant bool
+    err := database.GetDB().QueryRow(`
+        SELECT EXISTS(
+            SELECT 1 FROM session_participants 
+            WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
+        )`, sessionID, studentID).Scan(&isParticipant)
+
+    if err != nil || !isParticipant {
+        w.WriteHeader(http.StatusForbidden)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized for this session"})
+        return
+    }
+
+    var (
+        phase          string
+        startTimeStr   string
+        duration       int
+        isActive       bool
+    )
+
+    err = database.GetDB().QueryRow(`
+        SELECT phase, start_time, duration_seconds, is_active
+        FROM session_timers 
+        WHERE session_id = ? AND is_active = TRUE
+    `, sessionID).Scan(&phase, &startTimeStr, &duration, &isActive)
+
+    if err != nil {
+        if err == sql.ErrNoRows {
+            w.WriteHeader(http.StatusNotFound)
+            json.NewEncoder(w).Encode(map[string]string{"error": "No active timer found"})
+        } else {
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        }
+        return
+    }
+
+    // Parse start time
+    startTime, err := time.Parse("2006-01-02 15:04:05", startTimeStr)
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid timer data"})
+        return
+    }
+
+    // Calculate remaining time
+    elapsed := time.Since(startTime).Seconds()
+    remaining := math.Max(0, float64(duration)-elapsed)
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "phase": phase,
+        "remaining_seconds": int(remaining),
+        "total_seconds": duration,
+        "is_active": isActive,
+    })
+}
+
+func CompleteSessionPhase(w http.ResponseWriter, r *http.Request) {
+    var req struct {
+        SessionID string `json:"session_id"`
+    }
+
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+        return
+    }
+
+    studentID := r.Context().Value("studentID").(string)
+    
+    // Verify student is part of this session
+    var isParticipant bool
+    err := database.GetDB().QueryRow(`
+        SELECT EXISTS(
+            SELECT 1 FROM session_participants 
+            WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
+        )`, req.SessionID, studentID).Scan(&isParticipant)
+
+    if err != nil || !isParticipant {
+        w.WriteHeader(http.StatusForbidden)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized for this session"})
+        return
+    }
+
+    // Get current phase
+    var currentPhase string
+    err = database.GetDB().QueryRow(`
+        SELECT phase FROM session_timers WHERE session_id = ? AND is_active = TRUE
+    `, req.SessionID).Scan(&currentPhase)
+
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "No active timer found"})
+        return
+    }
+
+    // Get session agenda from admin configuration
+    var agendaJSON []byte
+    err = database.GetDB().QueryRow(`
+        SELECT agenda FROM gd_sessions WHERE id = ?
+    `, req.SessionID).Scan(&agendaJSON)
+
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to get session configuration"})
+        return
+    }
+
+    // Parse agenda with defaults
+    var agenda struct {
+        PrepTime   int `json:"prep_time"`
+        Discussion int `json:"discussion"`
+        Survey     int `json:"survey"`
+    }
+    
+    // Set default values
+    agenda.PrepTime = 1
+    agenda.Discussion = 1
+    agenda.Survey = 1
+
+    if len(agendaJSON) > 0 {
+        if err := json.Unmarshal(agendaJSON, &agenda); err != nil {
+            log.Printf("Error parsing agenda JSON: %v", err)
+            // Use defaults if parsing fails
+        }
+    }
+
+    // Determine next phase and duration based on admin config
+    var nextPhase string
+    var nextDuration int
+    switch currentPhase {
+    case "prep":
+        nextPhase = "discussion"
+        nextDuration = agenda.Discussion * 60 // Convert minutes to seconds
+    case "discussion":
+        nextPhase = "survey"
+        nextDuration = agenda.Survey * 60 // Convert minutes to seconds
+    default:
+        // End of session
+        _, err = database.GetDB().Exec(`
+            UPDATE session_timers SET is_active = FALSE WHERE session_id = ?
+        `, req.SessionID)
+        
+        if err != nil {
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Failed to end session"})
+            return
+        }
+
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(map[string]string{"status": "session_completed"})
+        return
+    }
+
+    // Start next phase timer
+    _, err = database.GetDB().Exec(`
+        UPDATE session_timers 
+        SET phase = ?, start_time = NOW(), duration_seconds = ?, updated_at = NOW()
+        WHERE session_id = ?
+    `, nextPhase, nextDuration, req.SessionID)
+
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to start next phase"})
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "status": "phase_completed",
+        "next_phase": nextPhase,
+        "duration_seconds": nextDuration,
+    })
+}
+
+// Also update StartSessionTimer to use admin config for initial prep time
+func StartSessionTimer(w http.ResponseWriter, r *http.Request) {
+    var req struct {
+        SessionID string `json:"session_id"`
+        Phase     string `json:"phase"`
+        Duration  int    `json:"duration_seconds"`
+    }
+
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+        return
+    }
+
+    studentID := r.Context().Value("studentID").(string)
+    
+    // Verify student is part of this session
+    var isParticipant bool
+    err := database.GetDB().QueryRow(`
+        SELECT EXISTS(
+            SELECT 1 FROM session_participants 
+            WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
+        )`, req.SessionID, studentID).Scan(&isParticipant)
+
+    if err != nil || !isParticipant {
+        w.WriteHeader(http.StatusForbidden)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized for this session"})
+        return
+    }
+
+    // Get session agenda from admin configuration for prep time
+    var agendaJSON []byte
+    err = database.GetDB().QueryRow(`
+        SELECT agenda FROM gd_sessions WHERE id = ?
+    `, req.SessionID).Scan(&agendaJSON)
+
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to get session configuration"})
+        return
+    }
+
+    // Parse agenda with defaults
+    var agenda struct {
+        PrepTime   int `json:"prep_time"`
+        Discussion int `json:"discussion"`
+        Survey     int `json:"survey"`
+    }
+    
+    // Set default values
+    agenda.PrepTime = 2
+    agenda.Discussion = 20
+    agenda.Survey = 5
+
+    if len(agendaJSON) > 0 {
+        if err := json.Unmarshal(agendaJSON, &agenda); err != nil {
+            log.Printf("Error parsing agenda JSON: %v", err)
+            // Use defaults if parsing fails
+        }
+    }
+
+    // Use admin-configured prep time for initial phase
+    prepDuration := agenda.PrepTime * 60 // Convert minutes to seconds
+
+    tx, err := database.GetDB().Begin()
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+    defer tx.Rollback()
+
+    // Insert or update timer with admin-configured duration
+    _, err = tx.Exec(`
+        INSERT INTO session_timers (session_id, phase, start_time, duration_seconds, is_active)
+        VALUES (?, ?, NOW(), ?, TRUE)
+        ON DUPLICATE KEY UPDATE 
+            phase = VALUES(phase),
+            start_time = VALUES(start_time),
+            duration_seconds = VALUES(duration_seconds),
+            is_active = VALUES(is_active),
+            updated_at = NOW()
+    `, req.SessionID, "prep", prepDuration)
+
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to start timer"})
+        return
+    }
+
+    // Update phase tracking
+    _, err = tx.Exec(`
+        INSERT INTO session_phase_tracking (session_id, student_id, phase, start_time)
+        VALUES (?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE phase = VALUES(phase), start_time = VALUES(start_time)
+    `, req.SessionID, studentID, "prep")
+
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update phase tracking"})
+        return
+    }
+
+    if err := tx.Commit(); err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "status": "timer_started",
+        "phase": "prep",
+        "duration_seconds": prepDuration,
+    })
+}
+
+func GetSessionConfiguration(w http.ResponseWriter, r *http.Request) {
+    sessionID := r.URL.Query().Get("session_id")
+    if sessionID == "" {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
+        return
+    }
+
+    studentID := r.Context().Value("studentID").(string)
+    
+    // Verify student is part of this session
+    var isParticipant bool
+    err := database.GetDB().QueryRow(`
+        SELECT EXISTS(
+            SELECT 1 FROM session_participants 
+            WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
+        )`, sessionID, studentID).Scan(&isParticipant)
+
+    if err != nil || !isParticipant {
+        w.WriteHeader(http.StatusForbidden)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized for this session"})
+        return
+    }
+
+    // Get session agenda from admin configuration
+    var agendaJSON []byte
+    err = database.GetDB().QueryRow(`
+        SELECT agenda FROM gd_sessions WHERE id = ?
+    `, sessionID).Scan(&agendaJSON)
+
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to get session configuration"})
+        return
+    }
+
+    // Parse agenda with defaults
+    var agenda struct {
+        PrepTime   int `json:"prep_time"`
+        Discussion int `json:"discussion"`
+        Survey     int `json:"survey"`
+    }
+    
+    // Set default values
+    agenda.PrepTime = 2
+    agenda.Discussion = 20
+    agenda.Survey = 5
+
+    if len(agendaJSON) > 0 {
+        if err := json.Unmarshal(agendaJSON, &agenda); err != nil {
+            log.Printf("Error parsing agenda JSON: %v", err)
+            // Use defaults if parsing fails
+        }
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "prep_time": agenda.PrepTime,
+        "discussion_time": agenda.Discussion,
+        "survey_time": agenda.Survey,
+    })
+}
+
+
+// // Complete current phase and move to next
+// func CompleteSessionPhase(w http.ResponseWriter, r *http.Request) {
+//     var req struct {
+//         SessionID string `json:"session_id"`
+//     }
+
+//     if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+//         w.WriteHeader(http.StatusBadRequest)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+//         return
+//     }
+
+//     studentID := r.Context().Value("studentID").(string)
+    
+//     // Verify student is part of this session
+//     var isParticipant bool
+//     err := database.GetDB().QueryRow(`
+//         SELECT EXISTS(
+//             SELECT 1 FROM session_participants 
+//             WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
+//         )`, req.SessionID, studentID).Scan(&isParticipant)
+
+//     if err != nil || !isParticipant {
+//         w.WriteHeader(http.StatusForbidden)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized for this session"})
+//         return
+//     }
+
+//     // Get current phase
+//     var currentPhase string
+//     err = database.GetDB().QueryRow(`
+//         SELECT phase FROM session_timers WHERE session_id = ? AND is_active = TRUE
+//     `, req.SessionID).Scan(&currentPhase)
+
+//     if err != nil {
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "No active timer found"})
+//         return
+//     }
+
+//     // Determine next phase
+//     var nextPhase string
+//     var nextDuration int
+//     switch currentPhase {
+//     case "prep":
+//         nextPhase = "discussion"
+//         // Get discussion time from session agenda
+//         var agendaJSON []byte
+//         err = database.GetDB().QueryRow(`
+//             SELECT agenda FROM gd_sessions WHERE id = ?
+//         `, req.SessionID).Scan(&agendaJSON)
+        
+//         if err == nil && len(agendaJSON) > 0 {
+//             var agenda struct {
+//                 Discussion int `json:"discussion"`
+//             }
+//             if err := json.Unmarshal(agendaJSON, &agenda); err == nil {
+//                 nextDuration = agenda.Discussion * 60
+//             }
+//         }
+//         if nextDuration == 0 {
+//             nextDuration = 600 // 10 minutes default
+//         }
+//     case "discussion":
+//         nextPhase = "survey"
+//         nextDuration = 300 // 5 minutes for survey
+//     default:
+//         // End of session
+//         _, err = database.GetDB().Exec(`
+//             UPDATE session_timers SET is_active = FALSE WHERE session_id = ?
+//         `, req.SessionID)
+        
+//         if err != nil {
+//             w.WriteHeader(http.StatusInternalServerError)
+//             json.NewEncoder(w).Encode(map[string]string{"error": "Failed to end session"})
+//             return
+//         }
+
+//         w.Header().Set("Content-Type", "application/json")
+//         json.NewEncoder(w).Encode(map[string]string{"status": "session_completed"})
+//         return
+//     }
+
+//     // Start next phase timer
+//     _, err = database.GetDB().Exec(`
+//         UPDATE session_timers 
+//         SET phase = ?, start_time = NOW(), duration_seconds = ?, updated_at = NOW()
+//         WHERE session_id = ?
+//     `, nextPhase, nextDuration, req.SessionID)
+
+//     if err != nil {
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to start next phase"})
+//         return
+//     }
+
+//     w.Header().Set("Content-Type", "application/json")
+//     json.NewEncoder(w).Encode(map[string]interface{}{
+//         "status": "phase_completed",
+//         "next_phase": nextPhase,
+//         "duration_seconds": nextDuration,
+//     })
+// }
+
+// // Start or update session timer
+// func StartSessionTimer(w http.ResponseWriter, r *http.Request) {
+//     var req struct {
+//         SessionID string `json:"session_id"`
+//         Phase     string `json:"phase"`
+//         Duration  int    `json:"duration_seconds"`
+//     }
+
+//     if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+//         w.WriteHeader(http.StatusBadRequest)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+//         return
+//     }
+
+//     studentID := r.Context().Value("studentID").(string)
+    
+//     // Verify student is part of this session
+//     var isParticipant bool
+//     err := database.GetDB().QueryRow(`
+//         SELECT EXISTS(
+//             SELECT 1 FROM session_participants 
+//             WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
+//         )`, req.SessionID, studentID).Scan(&isParticipant)
+
+//     if err != nil || !isParticipant {
+//         w.WriteHeader(http.StatusForbidden)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized for this session"})
+//         return
+//     }
+
+//     tx, err := database.GetDB().Begin()
+//     if err != nil {
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         return
+//     }
+//     defer tx.Rollback()
+
+//     // Insert or update timer
+//     _, err = tx.Exec(`
+//         INSERT INTO session_timers (session_id, phase, start_time, duration_seconds, is_active)
+//         VALUES (?, ?, NOW(), ?, TRUE)
+//         ON DUPLICATE KEY UPDATE 
+//             phase = VALUES(phase),
+//             start_time = VALUES(start_time),
+//             duration_seconds = VALUES(duration_seconds),
+//             is_active = VALUES(is_active),
+//             updated_at = NOW()
+//     `, req.SessionID, req.Phase, req.Duration)
+
+//     if err != nil {
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to start timer"})
+//         return
+//     }
+
+//     // Update phase tracking
+//     _, err = tx.Exec(`
+//         INSERT INTO session_phase_tracking (session_id, student_id, phase, start_time)
+//         VALUES (?, ?, ?, NOW())
+//         ON DUPLICATE KEY UPDATE phase = VALUES(phase), start_time = VALUES(start_time)
+//     `, req.SessionID, studentID, req.Phase)
+
+//     if err != nil {
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update phase tracking"})
+//         return
+//     }
+
+//     if err := tx.Commit(); err != nil {
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         return
+//     }
+
+//     w.Header().Set("Content-Type", "application/json")
+//     json.NewEncoder(w).Encode(map[string]string{"status": "timer_started"})
+// }

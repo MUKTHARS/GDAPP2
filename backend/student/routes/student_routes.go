@@ -91,6 +91,17 @@ router.Handle(baseurl+"/session/topic", middleware.StudentOnly(
 	router.Handle(baseurl+"/session-history", middleware.StudentOnly(
 		http.HandlerFunc(controllers.GetStudentSessionHistory)))
 
+
+// timers 
+
+router.Handle(baseurl+"/session/timer/start", middleware.StudentOnly(
+    http.HandlerFunc(controllers.StartSessionTimer)))
+router.Handle(baseurl+"/session/timer", middleware.StudentOnly(
+    http.HandlerFunc(controllers.GetSessionTimer)))
+router.Handle(baseurl+"/session/phase/complete", middleware.StudentOnly(
+    http.HandlerFunc(controllers.CompleteSessionPhase)))
+router.Handle(baseurl+"/session/configuration", middleware.StudentOnly(
+    http.HandlerFunc(controllers.GetSessionConfiguration)))
 		
 	router.Handle("/student/venues", middleware.StudentOnly(http.HandlerFunc(controllers.GetVenuesForStudent)))
 	// Use the correct middleware and function name

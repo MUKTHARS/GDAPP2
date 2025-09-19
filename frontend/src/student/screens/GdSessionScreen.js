@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, BackHandler } from 'react-native';
 import api from '../services/api';
 import auth from '../services/auth';
@@ -18,7 +18,14 @@ export default function GdSessionScreen({ navigation, route }) {
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [topic, setTopic] = useState("");
   const [isNewSession, setIsNewSession] = useState(true);
-
+ const [isTimerInitialized, setIsTimerInitialized] = useState(false);
+   const [sessionConfig, setSessionConfig] = useState({
+    prep_time: 1,
+    discussion_time: 1,
+    survey_time: 1
+  });
+  const timerRef = useRef(null);
+  const syncIntervalRef = useRef(null);
 useEffect(() => {
     // Reset phase to 'prep' when sessionId changes (new session)
     if (sessionId) {
@@ -211,19 +218,139 @@ useEffect(() => {
   fetchSessionAndTopic();
 }, [sessionId, navigation]);
 
-  const handlePhaseComplete = () => {
-    if (phase === 'prep') {
-      setPhase('discussion');
-        setTimeRemaining(10);
-      // setTimeRemaining(session.discussion_time * 60);  -- need to be uncommented
-    } else if (phase === 'discussion') {
+useEffect(() => {
+    const loadSessionData = async () => {
+      if (!sessionId) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Fetch session details
+        const sessionResponse = await api.student.getSession(sessionId);
+        if (sessionResponse.data?.error) {
+          throw new Error(sessionResponse.data.error);
+        }
+        setSession(sessionResponse.data);
+
+        // Fetch topic
+        const topicResponse = await api.student.getSessionTopic(sessionId);
+        setTopic(topicResponse.data?.topic_text || "Discuss the impact of technology on modern education");
+
+        // Initialize backend timer
+        await initializeBackendTimer();
+
+      } catch (error) {
+        console.error('Failed to load session:', error);
+        Alert.alert('Session Error', 'Unable to load session details', [
+          { text: 'OK', onPress: () => navigation.goBack() }
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadSessionData();
+
+    // Cleanup on unmount
+    return () => {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+      }
+    };
+  }, [sessionId, navigation]);
+
+  const initializeBackendTimer = async () => {
+    try {
+      // Check if timer already exists on backend
+      const timerResponse = await api.student.getSessionTimer(sessionId);
       
-      navigation.navigate('Survey', { 
-        sessionId: sessionId,
-        members: [] 
-      });
+      if (timerResponse.data && timerResponse.data.is_active) {
+        // Use existing timer
+        setPhase(timerResponse.data.phase);
+        setTimeRemaining(timerResponse.data.remaining_seconds);
+        setIsTimerInitialized(true);
+        startTimerSync();
+      } else {
+        // Create new timer for prep phase
+        const prepTime = 10; // session.prep_time * 60 (use actual value when available)
+        await api.student.startSessionTimer(sessionId, 'prep', prepTime);
+        setPhase('prep');
+        setTimeRemaining(prepTime);
+        setIsTimerInitialized(true);
+        startTimerSync();
+      }
+    } catch (error) {
+      console.log('Timer initialization failed, using fallback:', error);
+      // Fallback to local timer if backend fails
+      setPhase('prep');
+      setTimeRemaining(10); // Fallback time
+      setIsTimerInitialized(true);
     }
   };
+
+  const startTimerSync = () => {
+    // Sync with backend every 10 seconds
+    syncIntervalRef.current = setInterval(async () => {
+      try {
+        const timerResponse = await api.student.getSessionTimer(sessionId);
+        if (timerResponse.data && timerResponse.data.is_active) {
+          setPhase(timerResponse.data.phase);
+          setTimeRemaining(timerResponse.data.remaining_seconds);
+          
+          // If timer completed on backend, handle phase completion
+          if (timerResponse.data.remaining_seconds <= 0) {
+            handlePhaseComplete();
+          }
+        }
+      } catch (error) {
+        console.log('Timer sync error:', error);
+      }
+    }, 10000); // Sync every 10 seconds
+  };
+
+  const handlePhaseComplete = async () => {
+    try {
+      const response = await api.student.completeSessionPhase(sessionId);
+      
+      if (response.data.next_phase) {
+        setPhase(response.data.next_phase);
+        setTimeRemaining(response.data.duration_seconds);
+        
+        if (response.data.next_phase === 'survey') {
+          // Navigate to survey after a brief delay
+          setTimeout(() => {
+            navigation.navigate('Survey', { 
+              sessionId: sessionId,
+              members: [] 
+            });
+          }, 1000);
+        }
+      } else if (response.data.status === 'session_completed') {
+        navigation.navigate('Survey', { 
+          sessionId: sessionId,
+          members: [] 
+        });
+      }
+    } catch (error) {
+      console.error('Phase completion error:', error);
+      // Fallback handling
+      if (phase === 'prep') {
+        setPhase('discussion');
+        setTimeRemaining(10); // Fallback time
+      } else if (phase === 'discussion') {
+        navigation.navigate('Survey', { 
+          sessionId: sessionId,
+          members: [] 
+        });
+      }
+    }
+  };
+
+  const handleTimerComplete = () => {
+    handlePhaseComplete();
+  };
+
 
   const getPhaseIcon = (currentPhase) => {
     switch (currentPhase) {
@@ -286,6 +413,22 @@ useEffect(() => {
     );
   }
 
+if (loading || !isTimerInitialized) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <View style={styles.loadingCard}>
+            <View style={styles.loadingIconContainer}>
+              <Icon name="hourglass-empty" size={48} color="#4F46E5" />
+            </View>
+            <Text style={styles.loadingTitle}>Loading Session</Text>
+            <Text style={styles.loadingSubtitle}>Synchronizing timer with server...</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       
@@ -316,14 +459,15 @@ useEffect(() => {
             </View>
             <View style={styles.timerWrapper}>
                <Timer 
-    duration={
+                duration={timeRemaining}
+    // duration={
 
-       phase === 'prep' ? 10 : 
-    phase === 'discussion' ? 10 :
-      // phase === 'prep' ? session.prep_time * 60 : 
-      // phase === 'discussion' ? session.discussion_time * 60 : 
-      1 
-    }
+    //    phase === 'prep' ? 10 : 
+    // phase === 'discussion' ? 10 :
+    //   // phase === 'prep' ? session.prep_time * 60 : 
+    //   // phase === 'discussion' ? session.discussion_time * 60 : 
+    //   1 
+    // }
     onComplete={handlePhaseComplete}
     active={timerActive}
     initialTimeRemaining={timeRemaining}
